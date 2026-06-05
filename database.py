@@ -255,9 +255,88 @@ class SupabaseDB:
             res_data = await asyncio.to_thread(_insert)
             return res_data[0] if res_data else None
         except Exception as e:
-            logger.error(f"Error saving message for {user_key} to Supabase: {e}")
-            return None
+            is_column_missing = any(indicator in str(e) for indicator in ["42703", "column", "message_id"])
+            if message_id and "message_id" in data and is_column_missing:
+                logger.warning(
+                    f"Failed to save message with message_id (column missing): {e}. "
+                    "Retrying fallback save without message_id."
+                )
+                del data["message_id"]
+                try:
+                    def _insert_fallback():
+                        res = client.table("messages").insert(data).execute()
+                        return res.data
+                    res_data = await asyncio.to_thread(_insert_fallback)
+                    return res_data[0] if res_data else None
+                except Exception as e2:
+                    logger.error(f"Error in fallback save message for {user_key}: {e2}")
+                    return None
+            else:
+                logger.error(f"Error saving message for {user_key} to Supabase: {e}")
+                return None
 
+
+    async def check_and_register_message(
+        self,
+        platform: str,
+        user_id: str,
+        role: str,
+        content: Optional[str] = None,
+        message_id: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> bool:
+        """
+        Check if message_id already exists in Supabase.
+        If it does, returns False (indicating it is a duplicate).
+        If it does not, inserts the message immediately (acting as a lock) and returns True.
+        """
+        if not message_id:
+            return True
+
+        client = get_supabase_client()
+        if not client:
+            return True
+
+        user_key = self._get_user_key(platform, user_id)
+        
+        # Ensure user exists first
+        await self.create_or_update_user(platform, user_id)
+
+        try:
+            # Check if message_id exists
+            def _check():
+                res = client.table("messages").select("id").eq("message_id", message_id).execute()
+                return res.data
+            existing = await asyncio.to_thread(_check)
+            if existing:
+                return False
+
+            # Insert the actual message as a lock
+            data = {
+                "user_id": user_key,
+                "role": role,
+                "content": content,
+                "name": name,
+                "message_id": message_id,
+            }
+            def _insert():
+                client.table("messages").insert(data).execute()
+            await asyncio.to_thread(_insert)
+            return True
+        except Exception as e:
+            err_str = str(e)
+            is_column_missing = any(indicator in err_str for indicator in ["42703", "column", "message_id"])
+            if is_column_missing:
+                logger.error(
+                    "⚠️ DATABASE SCHEMA MISMATCH: The 'message_id' column is missing from your 'messages' table in Supabase. "
+                    "This causes message saving to fail and disables duplicate reply prevention. "
+                    "Please execute the following SQL in your Supabase SQL Editor to fix it:\n"
+                    "    ALTER TABLE messages ADD COLUMN message_id TEXT UNIQUE;"
+                )
+                return True # Proceed to process the message even if we couldn't deduplicate
+            
+            logger.warning(f"Conflict or error registering message_id {message_id}: {e}")
+            return False
 
     async def get_messages(self, platform: str, user_id: str, limit: int = 20) -> List[Dict[str, Any]]:
         """Retrieve recent message history sorted chronologically."""
@@ -296,6 +375,8 @@ class SupabaseDB:
                         cleaned["tool_calls"] = msg["tool_calls"]
                     if msg.get("tool_call_id"):
                         cleaned["tool_call_id"] = msg["tool_call_id"]
+                    if msg.get("message_id"):
+                        cleaned["message_id"] = msg["message_id"]
                     formatted.append(cleaned)
                 return formatted
             return []

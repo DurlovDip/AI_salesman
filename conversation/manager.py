@@ -64,6 +64,11 @@ class ConversationSession:
 
     def add_message(self, role: str, content: str, message_id: Optional[str] = None) -> None:
         """Add a message, trim history, and sync to Supabase."""
+        # Prevent duplicate message insertion if the last message in history has the same message_id
+        if message_id and self.messages and self.messages[-1].get("message_id") == message_id:
+            logger.debug(f"Message {message_id} already at the end of session history. Skipping in-memory append.")
+            return
+
         msg = {"role": role, "content": content}
         if message_id:
             msg["message_id"] = message_id
@@ -121,7 +126,20 @@ class ConversationSession:
 
     def get_chat_messages(self) -> List[Dict]:
         """Return messages formatted for the AI chat API."""
-        return list(self.messages)
+        cleaned = []
+        for msg in self.messages:
+            m = {
+                "role": msg["role"],
+                "content": msg["content"],
+            }
+            if "name" in msg:
+                m["name"] = msg["name"]
+            if "tool_calls" in msg:
+                m["tool_calls"] = msg["tool_calls"]
+            if "tool_call_id" in msg:
+                m["tool_call_id"] = msg["tool_call_id"]
+            cleaned.append(m)
+        return cleaned
 
     def reset(self) -> None:
         """Clear conversation history (in-memory and handoff state)."""

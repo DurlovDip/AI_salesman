@@ -184,6 +184,22 @@ async def _respond_to_user(
         profile = contact.get("profile", {})
         user_name = profile.get("name")
 
+    # Deduplicate messages using message_id synchronously
+    if message_id:
+        from database import db
+        if db.is_configured():
+            is_new = await db.check_and_register_message(
+                platform="whatsapp",
+                user_id=phone,
+                role="user",
+                content=user_text,
+                message_id=message_id,
+                name=user_name
+            )
+            if not is_new:
+                logger.info(f"⏭️ Skipping duplicate/already processed WhatsApp message {message_id}")
+                return
+
     # Get or create conversation session
     session = await conversation_manager.get_or_create("whatsapp", phone, user_name)
 

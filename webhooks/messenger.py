@@ -186,9 +186,6 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
     """
     Process user text through the AI agent and send the response.
     """
-    # Get or create conversation session
-    session = await conversation_manager.get_or_create("messenger", sender_id)
-
     # Fetch profile information from Graph API immediately to register user
     full_name = "Facebook User"
     try:
@@ -197,9 +194,28 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
             first_name = profile.get("first_name", "")
             last_name = profile.get("last_name", "")
             full_name = f"{first_name} {last_name}".strip()
-            session.metadata["user_name"] = full_name
     except Exception as e:
         logger.warning(f"Failed to fetch profile for {sender_id}: {e}")
+
+    # Deduplicate messages using message_id synchronously
+    if message_id:
+        from database import db
+        if db.is_configured():
+            is_new = await db.check_and_register_message(
+                platform="messenger",
+                user_id=sender_id,
+                role="user",
+                content=user_text,
+                message_id=message_id,
+                name=full_name
+            )
+            if not is_new:
+                logger.info(f"⏭️ Skipping duplicate/already processed Messenger message {message_id}")
+                return
+
+    # Get or create conversation session
+    session = await conversation_manager.get_or_create("messenger", sender_id, full_name)
+    session.metadata["user_name"] = full_name
 
     # Track user in Supabase immediately
     from database import db
