@@ -1,0 +1,98 @@
+{
+  "data": [
+    {
+      "access_token": "EAAhIWHu8P1gBRgMRlK6NlYZCgkGzA3iptkKisPeR2rJgLYc3Kx0ZB4d6uM7gNs2Cog0D13aZAVCzaTbVmENHlDu6nwKAGpuDYqTmG35iTEgvmCKZA80Nw2YUP5dftUw4L7aE5uDsMnoDvoV12vj1YyEBF60g3NmudqoW6YzLRUncMzNULhQ2jnv1DcLoroiEevRZCb7kiyP3bV8AUuNs48h181kMO5XHiMnoEiDTM22yPf7LHoZAsnlBxSqwMZD",
+      "category": "Shopping centre",
+      "category_list": [
+        {
+          "id": "109527622457518",
+          "name": "Shopping centre"
+        },
+        {
+          "id": "1153901557995608",
+          "name": "Supermarket"
+        },
+        {
+          "id": "186230924744328",
+          "name": "Clothes shop"
+        }
+      ],
+      "name": "Fabingo",
+      "id": "970073619531937",
+      "tasks": [
+        "MODERATE",
+        "MESSAGING",
+        "ANALYZE",
+        "ADVERTISE",
+        "CREATE_CONTENT",
+        "MANAGE"
+      ]
+    },
+    {
+      "access_token": "EAAhIWHu8P1gBRoFCA3SZBIFz6pJ9vJuGHciakt2Eq5vVEAjPaAjvMUdU5ZCQkNZCsHRVvA5ipNDGNxD0i8WhmzyLZCEBjJwAJ4BG8DfTqKhZCMsZAX3ZAlwa9dwyssYab3ZBYe2Vx0mO6gb9vZC91xtWspPrhH3wzkQA9jpEunazG4gjzzL4dQeO1M0sYDeYhGpYJi2adQStOQLXyIxZAZA5nHj0w9PYPfL9V48EvFNQ5tN0xOXBsgxgGts9C6JPVkZD",
+      "category": "Education website",
+      "category_list": [
+        {
+          "id": "2704",
+          "name": "Education website"
+        }
+      ],
+      "name": "Octagon",
+      "id": "371706709362396",
+      "tasks": [
+        "MODERATE",
+        "MESSAGING",
+        "ANALYZE",
+        "ADVERTISE",
+        "CREATE_CONTENT",
+        "MANAGE"
+      ]
+    },
+    {
+      "access_token": "EAAhIWHu8P1gBRvYhti0N0fcZBfpEm6u6SE4kslR9oGcRcZA1xINdVBV4S2eRN4qzlAxKzhgJnD0MSzW5l8dOQ5lRU60PAVxnSczsXXLg8uEtHtt1ZBa2inClLxfak9FxZAyZCTAomBSGsxL8ynZBYBeZBSV1FCWnxT7Ky0fnR6rkGxXl6BbXWcZCekugM4Nv6CUuy2fYIy8eXKRnZAKPZCZAnRZBRaiNeZAfdsvCtdqZA7zqjcFsxAXfIxEhmCwUYyFAZDZD",
+      "category": "Reel creator",
+      "category_list": [
+        {
+          "id": "1817904601806120",
+          "name": "Video creator"
+        }
+      ],
+      "name": "যুগযান",
+      "id": "110375994029634",
+      "tasks": [
+        "MODERATE",
+        "MESSAGING",
+        "ANALYZE",
+        "ADVERTISE",
+        "CREATE_CONTENT",
+        "MANAGE"
+      ]
+    },
+    {
+      "access_token": "EAAhIWHu8P1gBRg2BFDuVUJkqHFgt23lDcS1LEdcsp3ZCIpkZAZBk31fyucyLx6yw9nIggfpIdIx26f13iIOzuPgMRwOr3grNFlYemvOKZAQHUGnIW4dfbZANPVdP0eHS9EQJdZCSrhA5FHZB0lIdo0bCSqzhPgEsQTp1YySyuvZAtqdaKGLyKIlEPhzCtjWN8tybMirrdvnGaoDmBPCZBEjNPP0XYTqrDHNI9XZAj24kktfOHvEhupwO8PgRjAGMAZD",
+      "category": "Art",
+      "category_list": [
+        {
+          "id": "2903",
+          "name": "Art"
+        }
+      ],
+      "name": "চারু চিরকুট",
+      "id": "2035630433408147",
+      "tasks": [
+        "MODERATE",
+        "MESSAGING",
+        "ANALYZE",
+        "ADVERTISE",
+        "CREATE_CONTENT",
+        "MANAGE"
+      ]
+    }
+  ],
+  "paging": {
+    "cursors": {
+      "before": "QVFIU0tTcDhldDF2SlluYWVqdk1ZAUlhwdXdxaUYzWGNlbU1nOXNQRHNfSTZAoRGtqVVl0UTlUeUJNQTY4UkRmck1ZAYlQ3QnE5RGt4VGlWRHc0bF9zc2d4MzN3",
+      "after": "QVFIU2dmcXRLamc3eU95eFFZARWZAiSW5BUnlfZAnFla2N4SXloREY0YVdfdVgwWHFnc1NMYlJZALXV4R0tXMWJuMFVseW1McFJZARnNDd3plTzdSNV93VW4xX2NR"
+    }
+  }
+}

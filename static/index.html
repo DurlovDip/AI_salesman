@@ -1,0 +1,1968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fashion ARC — Chat Console</title>
+    <!-- Outfit Google Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-weight/6.4.0/css/all.min.css">
+    
+    <style>
+        :root {
+            --bg-main: #0b0f19;
+            --bg-card: rgba(17, 24, 39, 0.7);
+            --bg-bubble-user: #3b82f6;
+            --bg-bubble-bot: #8b5cf6;
+            --bg-bubble-human: #10b981;
+            --bg-bubble-incoming: #1e293b;
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --accent-color: #6366f1;
+            --accent-hover: #4f46e5;
+            --glass-blur: blur(12px);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Outfit', sans-serif;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        body {
+            background: var(--bg-main);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.12) 0px, transparent 50%);
+        }
+
+        /* ── Layout ── */
+        .sidebar {
+            width: 320px;
+            border-right: 1px solid var(--border-color);
+            background: var(--bg-card);
+            backdrop-filter: var(--glass-blur);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            background: rgba(15, 23, 42, 0.4);
+            min-width: 0;
+        }
+
+        .inspector-panel {
+            width: 340px;
+            border-left: 1px solid var(--border-color);
+            background: var(--bg-card);
+            backdrop-filter: var(--glass-blur);
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        /* ── Sidebar Header & Connection Status ── */
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-icon {
+            background: linear-gradient(135deg, var(--accent-color), var(--bg-bubble-bot));
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 1.1rem;
+            box-shadow: 0 0 15px rgba(99, 102, 241, 0.4);
+        }
+
+        .logo-text {
+            font-weight: 700;
+            font-size: 1.2rem;
+            letter-spacing: 0.5px;
+            background: linear-gradient(to right, #fff, #c7d2fe);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .connection-card {
+            margin: 15px;
+            padding: 12px;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 0.85rem;
+        }
+
+        .status-line {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ef4444; /* red default */
+        }
+
+        .status-dot.active {
+            background: #10b981; /* green */
+            box-shadow: 0 0 8px #10b981;
+        }
+
+        .status-text {
+            color: var(--text-muted);
+        }
+
+        /* ── Conversation List ── */
+        .conv-list-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 0;
+        }
+
+        .list-section-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            padding: 10px 20px;
+            font-weight: 600;
+        }
+
+        .conv-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+
+        .conv-item:hover {
+            background: rgba(255, 255, 255, 0.03);
+        }
+
+        .conv-item.active {
+            background: rgba(99, 102, 241, 0.12);
+            border-left: 3px solid var(--accent-color);
+        }
+
+        .avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: #374151;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: #fff;
+            position: relative;
+        }
+
+        .platform-badge {
+            position: absolute;
+            bottom: -2px;
+            right: -2px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.65rem;
+            color: white;
+            border: 2px solid var(--bg-main);
+        }
+
+        .platform-badge.messenger {
+            background: #0084ff;
+        }
+
+        .platform-badge.whatsapp {
+            background: #25d366;
+        }
+
+        .platform-badge.test {
+            background: #6b7280;
+        }
+
+        .conv-details {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .conv-name-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        .conv-name {
+            font-weight: 500;
+            font-size: 0.95rem;
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .conv-time {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .conv-preview {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .conv-badges {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 5px;
+        }
+
+        .handoff-badge {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--bg-bubble-human);
+            font-size: 0.65rem;
+            padding: 2px 6px;
+            border-radius: 8px;
+            font-weight: 600;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        /* ── Sidebar Footer / Simulator Button ── */
+        .sidebar-footer {
+            padding: 15px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border-radius: 10px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 0.9rem;
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-main);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            margin-top: 8px;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.08);
+        }
+
+        /* ── Chat Window Header ── */
+        .chat-header {
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(17, 24, 39, 0.3);
+            backdrop-filter: var(--glass-blur);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .header-user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-username {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .header-meta {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        /* Handoff Toggle Switch */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 36px;
+            height: 20px;
+        }
+
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #4b5563;
+            transition: .3s;
+            border-radius: 20px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 14px;
+            width: 14px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--bg-bubble-human);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(16px);
+        }
+
+        /* ── Chat Messages Log ── */
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .no-chat-selected {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            gap: 16px;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .no-chat-icon {
+            font-size: 3.5rem;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent-color);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .msg-row {
+            display: flex;
+            width: 100%;
+        }
+
+        .msg-row.incoming {
+            justify-content: flex-start;
+        }
+
+        .msg-row.outgoing {
+            justify-content: flex-end;
+        }
+
+        .msg-wrapper {
+            max-width: 65%;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .msg-bubble {
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 0.92rem;
+            line-height: 1.45;
+            white-space: pre-wrap;
+            position: relative;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+            word-break: break-word;
+            overflow-wrap: break-word;
+        }
+
+        .incoming .msg-bubble {
+            background: var(--bg-bubble-incoming);
+            color: var(--text-main);
+            border-bottom-left-radius: 4px;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        .outgoing .msg-bubble {
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .outgoing.bot .msg-bubble {
+            background: var(--bg-bubble-bot);
+            box-shadow: 0 4px 10px rgba(139, 92, 246, 0.25);
+        }
+
+        .outgoing.human .msg-bubble {
+            background: var(--bg-bubble-human);
+            box-shadow: 0 4px 10px rgba(16, 185, 129, 0.25);
+        }
+
+        .outgoing.tool .msg-bubble {
+            background: #475569;
+            color: #f1f5f9;
+            font-family: monospace;
+            font-size: 0.8rem;
+            max-width: 100%;
+        }
+
+        .msg-info {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.72rem;
+            color: var(--text-muted);
+            padding: 0 4px;
+        }
+
+        .outgoing .msg-info {
+            justify-content: flex-end;
+        }
+
+        .sender-tag {
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 0.65rem;
+            padding: 1px 4px;
+            border-radius: 4px;
+        }
+
+        .bot .sender-tag {
+            background: rgba(255,255,255,0.2);
+            color: #fff;
+        }
+
+        .human .sender-tag {
+            background: rgba(255,255,255,0.2);
+            color: #fff;
+        }
+
+        /* Carousel Card in bubble */
+        .carousel-card {
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            overflow: hidden;
+            background: rgba(255,255,255,0.02);
+            margin-top: 8px;
+            max-width: 250px;
+        }
+
+        .carousel-img {
+            width: 100%;
+            height: 130px;
+            object-fit: cover;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .carousel-body {
+            padding: 10px;
+        }
+
+        .carousel-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .carousel-desc {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 8px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .carousel-btn {
+            display: block;
+            width: 100%;
+            padding: 6px;
+            text-align: center;
+            background: rgba(255,255,255,0.05);
+            border-radius: 6px;
+            font-size: 0.75rem;
+            color: var(--text-main);
+            text-decoration: none;
+            border: 1px solid rgba(255,255,255,0.05);
+            font-weight: 500;
+        }
+
+        /* Typing indicator */
+        .typing-bubble {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 12px 18px;
+            background: var(--bg-bubble-incoming);
+            border-radius: 16px;
+            border-bottom-left-radius: 4px;
+            width: fit-content;
+            animation: pulse 1.5s infinite;
+        }
+
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--text-muted);
+            border-radius: 50%;
+            display: inline-block;
+            animation: bounce 1.3s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.15s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+
+        @keyframes bounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-4px); }
+        }
+
+        /* ── Chat Footer / Input area ── */
+        .chat-footer {
+            padding: 20px 24px;
+            background: rgba(17, 24, 39, 0.4);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .input-shortcuts {
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            padding-bottom: 4px;
+        }
+
+        .shortcut-chip {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.05);
+            color: var(--text-muted);
+            padding: 6px 12px;
+            border-radius: 15px;
+            font-size: 0.78rem;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .shortcut-chip:hover {
+            background: rgba(255,255,255,0.08);
+            color: var(--text-main);
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        .input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 6px 12px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .chat-input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: var(--text-main);
+            padding: 10px 4px;
+            font-size: 0.95rem;
+            resize: none;
+            height: 40px;
+            outline: none;
+        }
+
+        .btn-send {
+            background: var(--accent-color);
+            border: none;
+            color: white;
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-send:hover {
+            background: var(--accent-hover);
+            transform: scale(1.02);
+        }
+
+        /* ── Inspector Panel / Right Side ── */
+        .inspector-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .inspector-section {
+            margin-bottom: 24px;
+        }
+
+        .inspector-section-header {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        .data-card {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 14px;
+            font-size: 0.88rem;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .data-row {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .data-label {
+            color: var(--text-muted);
+        }
+
+        .data-value {
+            font-weight: 500;
+            word-break: break-all;
+            text-align: right;
+            max-width: 65%;
+        }
+
+        .json-code {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 0.75rem;
+            overflow-x: auto;
+            max-height: 250px;
+            white-space: pre-wrap;
+            color: #34d399;
+        }
+
+        /* ── Modals / Simulator popup ── */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            z-index: 100;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-card {
+            background: #111827;
+            border: 1px solid var(--border-color);
+            width: 440px;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        .modal-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .form-control {
+            width: 100%;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px 12px;
+            color: white;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border 0.2s ease;
+        }
+
+        .form-control:focus {
+            border-color: var(--accent-color);
+        }
+
+        .form-select {
+            appearance: none;
+            background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            background-size: 16px;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
+        }
+
+        /* ── Banner Alerts ── */
+        .alert-banner {
+            background: rgba(239, 68, 68, 0.15);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: #fca5a5;
+            padding: 10px 15px;
+            margin: 15px;
+            border-radius: 10px;
+            font-size: 0.82rem;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .alert-banner i {
+            margin-top: 2px;
+        }
+
+        /* Pulse for typing */
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ── Sidebar ── -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo-container">
+                <div class="logo-icon"><i class="fa-solid fa-robot"></i></div>
+                <div class="logo-text">AI Salesman</div>
+            </div>
+            <span style="font-size: 0.72rem; background: rgba(99,102,241,0.2); padding: 3px 8px; border-radius: 10px; color:#c7d2fe; font-weight:600;">v1.0</span>
+        </div>
+
+        <div class="connection-card">
+            <div class="status-line">
+                <div class="status-dot" id="meta-status-dot"></div>
+                <span id="meta-status-text">Checking Meta token...</span>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.05); font-size: 0.75rem; align-items: center; justify-content: space-between;">
+                <span id="status-groq" style="display: flex; align-items: center; gap: 3px; color: var(--text-muted); transition: all 0.3s ease;">
+                    <i class="fa-solid fa-bolt"></i> Groq
+                </span>
+                <span id="status-openai" style="display: flex; align-items: center; gap: 3px; color: var(--text-muted); transition: all 0.3s ease;">
+                    <i class="fa-solid fa-brain"></i> OpenAI
+                </span>
+                <span id="status-gemini" style="display: flex; align-items: center; gap: 3px; color: var(--text-muted); transition: all 0.3s ease;">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Gemini
+                </span>
+            </div>
+        </div>
+
+        <div id="meta-error-banner" class="alert-banner" style="display:none;">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <div>
+                <strong>OAuth Error:</strong> Page access token has expired or is invalid. Fallback local testing is enabled.
+            </div>
+        </div>
+
+        <div class="conv-list-container">
+            <div class="list-section-title">Active Conversations</div>
+            <div id="conv-list">
+                <!-- Loaded dynamically -->
+                <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
+                    <i class="fa-solid fa-spinner fa-spin" style="margin-bottom:8px; font-size:1.2rem; display:block;"></i>
+                    Loading chats...
+                </div>
+            </div>
+        </div>
+
+        <div class="sidebar-footer" style="display: flex; flex-direction: column; gap: 8px;">
+            <button class="btn btn-primary" onclick="openSimulateModal()" style="width: 100%;">
+                <i class="fa-solid fa-user-plus"></i> Simulate Customer
+            </button>
+            <button class="btn btn-secondary" onclick="openOrdersModal()" style="width: 100%; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05); color: #34d399; margin: 0;">
+                <i class="fa-solid fa-clipboard-check"></i> Confirmed Orders
+            </button>
+            <div style="display: flex; gap: 8px; width: 100%;">
+                <button class="btn btn-secondary" onclick="openGuidelinesModal()" style="flex: 1; margin: 0;">
+                    <i class="fa-solid fa-sliders"></i> AI Guidelines
+                </button>
+                <button class="btn btn-secondary" onclick="loadConversations()" style="flex: 1; margin: 0;">
+                    <i class="fa-solid fa-rotate"></i> Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Main Chat Area ── -->
+    <div class="chat-container">
+        <!-- Chat Header -->
+        <div class="chat-header" id="chat-header" style="display:none;">
+            <div class="header-user-info">
+                <div class="avatar" id="active-avatar">U</div>
+                <div>
+                    <div class="header-username" id="active-username">Select a chat</div>
+                    <div class="header-meta" id="active-meta">Messenger • PSID: ---</div>
+                </div>
+            </div>
+            <div class="header-actions">
+                <div class="toggle-container" onclick="toggleHandoff()">
+                    <span style="font-weight:500;">Human Takeover</span>
+                    <label class="switch">
+                        <input type="checkbox" id="handoff-toggle" readonly>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Chat Window -->
+        <div class="chat-messages" id="chat-messages">
+            <div class="no-chat-selected">
+                <div class="no-chat-icon"><i class="fa-regular fa-comments"></i></div>
+                <h3 style="font-weight:600; font-size:1.2rem;">Welcome to the Chat Console</h3>
+                <p style="font-size:0.88rem; max-width:280px; line-height:1.4;">Select a customer from the left sidebar to view history, chat with them, or test the AI salesman triggers.</p>
+            </div>
+        </div>
+
+        <!-- Chat Input / Footer -->
+        <div class="chat-footer" id="chat-footer" style="display:none;">
+            <div class="input-shortcuts" id="shortcuts">
+                <span class="shortcut-chip" onclick="applyShortcut('Show me black t-shirts under 1200')">🔍 Black T-shirts under 1200</span>
+                <span class="shortcut-chip" onclick="applyShortcut('Return policy')">❓ Return Policy</span>
+                <span class="shortcut-chip" onclick="applyShortcut('Where is my order 12345?')">📦 Track Order 12345</span>
+                <span class="shortcut-chip" onclick="applyShortcut('I want to speak to a human')"> Escalation test</span>
+            </div>
+            <div class="input-wrapper">
+                <textarea class="chat-input" id="message-input" placeholder="Type a message to the customer..." onkeydown="handleInputKey(event)"></textarea>
+                
+                <!-- Action dropdown (AI or Human) -->
+                <select id="send-mode" class="form-control" style="width: auto; padding: 4px 8px; font-size: 0.8rem; background: rgba(255,255,255,0.05); border: none; margin-right: 8px;">
+                    <option value="human">Send as Human</option>
+                    <option value="ai">Send & Trigger AI</option>
+                </select>
+
+                <button class="btn-send" onclick="sendMessage()"><i class="fa-solid fa-paper-plane"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Right Inspector Panel ── -->
+    <div class="inspector-panel" id="inspector-panel" style="display:none;">
+        <div class="inspector-title">
+            <i class="fa-solid fa-circle-info" style="color:var(--accent-color);"></i> Session Inspector
+        </div>
+        
+        <div class="inspector-section">
+            <div class="inspector-section-header">Customer Details</div>
+            <div class="data-card">
+                <div class="data-row">
+                    <span class="data-label">Name</span>
+                    <span class="data-value" id="inspect-name">---</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Platform</span>
+                    <span class="data-value" id="inspect-platform">---</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">User ID (PSID)</span>
+                    <span class="data-value" id="inspect-id" style="font-family:monospace; font-size:0.8rem;">---</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">Last Active</span>
+                    <span class="data-value" id="inspect-last-active">---</span>
+                </div>
+                <div class="data-row">
+                    <span class="data-label">AI Status</span>
+                    <span class="data-value" id="inspect-ai-status">Active</span>
+                </div>
+                <div class="data-row" style="align-items: center; justify-content: space-between; width: 100%;">
+                    <span class="data-label">Role</span>
+                    <select id="inspect-role" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 6px; padding: 4px 8px; font-size: 0.85rem; cursor: pointer; outline: none;">
+                        <option value="Customer">Customer</option>
+                        <option value="Tester">Tester</option>
+                        <option value="Admin">Admin</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="inspector-section">
+            <div class="inspector-section-header">Control Center</div>
+            <div style="display:flex; flex-direction:column; gap:8px;">
+                <button class="btn btn-secondary" onclick="resetActiveSession()" style="color:#ef4444; border-color:rgba(239, 68, 68, 0.2);">
+                    <i class="fa-solid fa-trash-can"></i> Reset Conversation
+                </button>
+                <button class="btn btn-secondary" onclick="triggerManualAIResponse()">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Force AI Response
+                </button>
+            </div>
+        </div>
+
+        <div class="inspector-section" style="flex: 1; display:flex; flex-direction:column;">
+            <div class="inspector-section-header">Raw Session History</div>
+            <pre class="json-code" id="inspect-json" style="flex:1;"></pre>
+        </div>
+    </div>
+
+    <!-- ── Simulate User Modal ── -->
+    <div class="modal" id="simulate-modal">
+        <div class="modal-card">
+            <div class="modal-title">
+                <i class="fa-solid fa-user-plus" style="color:var(--accent-color);"></i> Simulate Customer Entry
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Customer Name</label>
+                <input type="text" id="sim-name" class="form-control" placeholder="e.g. Adnan Rahman">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Platform</label>
+                <select id="sim-platform" class="form-control form-select">
+                    <option value="messenger">Facebook Messenger</option>
+                    <option value="whatsapp">WhatsApp Business</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Simulated User ID (PSID / Phone)</label>
+                <input type="text" id="sim-id" class="form-control" placeholder="e.g. 8801712345678 or 10293847">
+                <small style="font-size:0.75rem; color:var(--text-muted); margin-top:4px; display:block;">Leave blank to generate a random ID</small>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Role</label>
+                <select id="sim-role" class="form-control form-select">
+                    <option value="Customer">Customer</option>
+                    <option value="Tester">Tester</option>
+                    <option value="Admin">Admin</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Initial Message</label>
+                <input type="text" id="sim-message" class="form-control" placeholder="e.g. Hi, show me black t-shirts under 1200" value="Hello!">
+            </div>
+
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" onclick="closeSimulateModal()" style="margin:0; flex:1;">Cancel</button>
+                <button class="btn btn-primary" onclick="submitSimulate()" style="margin:0; flex:1;">Simulate</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── AI Guidelines Modal ── -->
+    <div class="modal" id="guidelines-modal">
+        <div class="modal-card" style="max-width: 650px; width: 90%; max-height: 90vh; display: flex; flex-direction: column;">
+            
+            <!-- VIEW 1: Context List View (Default) -->
+            <div id="context-list-view" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+                <div class="modal-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-sliders" style="color:var(--accent-color);"></i> AI Guidelines / Context
+                    </div>
+                    <button class="btn btn-primary" onclick="showCreateContextView()" style="margin: 0; padding: 6px 14px; font-size: 0.85rem; height: 34px; display: flex; align-items: center; gap: 6px;">
+                        <i class="fa-solid fa-plus"></i> Create Context
+                    </button>
+                </div>
+                
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 15px; margin-top: 0;">
+                    Manage dynamic context guidelines that direct the AI. Universal contexts are always active; Special contexts can be toggled.
+                </p>
+
+                <div id="contexts-list-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px;">
+                    <!-- Loaded dynamically via renderContextList() -->
+                </div>
+
+                <div class="modal-buttons" style="margin-top: 20px; display: flex; gap: 8px;">
+                    <button class="btn btn-secondary" onclick="closeGuidelinesModal()" style="margin:0; width: 100%;">Close</button>
+                </div>
+            </div>
+
+            <!-- VIEW 2: Editable Context Menu (Create/Edit Form, hidden by default) -->
+            <div id="context-edit-view" style="display: none; flex-direction: column; flex: 1; overflow: hidden;">
+                <div class="modal-title" id="context-edit-title">
+                    <i class="fa-solid fa-pen-to-square" style="color:var(--accent-color);"></i> Edit Context
+                </div>
+                
+                <div style="flex: 1; overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px;">
+                    <!-- Hidden input to track editing ID -->
+                    <input type="hidden" id="edit-context-id">
+
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label">Context Name</label>
+                        <input type="text" id="context-name-input" class="form-control" placeholder="e.g. Standard Sales Rules" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-color);">
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label">Context Type</label>
+                        <select id="context-type-select" class="form-control" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-color); padding-right: 32px;" class="form-select">
+                            <option value="special">Special (Can be toggled active/inactive)</option>
+                            <option value="universal">Universal (Always active)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label class="form-label">Description / Test Details</label>
+                        <input type="text" id="context-desc-input" class="form-control" placeholder="e.g. General guidelines for standard sales assistant mode" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-color);">
+                    </div>
+                    
+                    <div class="form-group" style="flex: 1; display: flex; flex-direction: column; margin-bottom: 0;">
+                        <label class="form-label">System Guidelines & Rules (Text)</label>
+                        <textarea id="guidelines-textarea" class="form-control" style="height: 220px; font-family: monospace; font-size: 0.85rem; line-height: 1.5; resize: vertical;" placeholder="- Respond to customers in their language..."></textarea>
+                        <small style="font-size:0.75rem; color:var(--text-muted); margin-top:4px; display:block;">These guidelines are dynamically loaded and merged into the AI System Prompt.</small>
+                    </div>
+                </div>
+
+                <div class="modal-buttons" style="display: flex; gap: 8px;">
+                    <button class="btn btn-secondary" onclick="backToContextListView()" style="margin:0; flex:1;">Cancel</button>
+                    <button class="btn btn-primary" onclick="saveCurrentContext()" style="margin:0; flex:1.5;">
+                        <i class="fa-solid fa-floppy-disk"></i> Save Context
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Confirmed Orders Modal ── -->
+    <div class="modal" id="orders-modal">
+        <div class="modal-card" style="max-width: 900px; width: 95%;">
+            <div class="modal-title">
+                <i class="fa-solid fa-clipboard-check" style="color:#10b981;"></i> Confirmed Customer Orders
+            </div>
+            
+            <div class="form-group" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+                <div style="overflow-x: auto; width: 100%; border: 1px solid var(--border-color); border-radius: 8px; background: rgba(0,0,0,0.2); max-height: 450px;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid var(--border-color); background: rgba(255,255,255,0.02); color: var(--text-muted);">
+                                <th style="padding: 12px 16px; font-weight: 600;">Date/Time</th>
+                                <th style="padding: 12px 16px; font-weight: 600;">Customer</th>
+                                <th style="padding: 12px 16px; font-weight: 600;">Phone</th>
+                                <th style="padding: 12px 16px; font-weight: 600;">Address</th>
+                                <th style="padding: 12px 16px; font-weight: 600;">Order Details</th>
+                            </tr>
+                        </thead>
+                        <tbody id="orders-table-body">
+                            <!-- Loaded dynamically -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="modal-buttons" style="margin-top: 15px;">
+                <button class="btn btn-secondary" onclick="closeOrdersModal()" style="margin:0; width: 100%;">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── Javascript Logic ── -->
+    <script>
+        const API_BASE = "";
+        let conversations = [];
+        let activeChat = null;
+        let isTyping = false;
+
+        // On Load
+        window.addEventListener('DOMContentLoaded', () => {
+            checkMetaStatus();
+            checkAIStatus();
+            loadConversations();
+            
+            // Add listener for role select
+            const roleSelect = document.getElementById('inspect-role');
+            if (roleSelect) {
+                roleSelect.addEventListener('change', updateUserRole);
+            }
+            
+            // Poll for new messages every 5 seconds
+            setInterval(() => {
+                loadConversations(true);
+                if (activeChat) {
+                    loadActiveChatMessages(true);
+                }
+            }, 5000);
+
+            // Poll for AI status every 10 seconds
+            setInterval(() => {
+                checkAIStatus();
+            }, 10000);
+        });
+
+        // ── API Calls ──
+        async function checkMetaStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/health`);
+                const data = await res.json();
+                
+                const dot = document.getElementById('meta-status-dot');
+                const text = document.getElementById('meta-status-text');
+                const banner = document.getElementById('meta-error-banner');
+
+                if (data.messenger) {
+                    const convRes = await fetch(`${API_BASE}/api/facebook/conversations`);
+                    const convData = await convRes.json();
+                    if (convData.meta_api_error) {
+                        dot.className = 'status-dot';
+                        text.innerHTML = 'Meta API Offline (Token Expired)';
+                        banner.style.display = 'flex';
+                    } else {
+                        dot.className = 'status-dot active';
+                        text.innerHTML = 'Meta Connected';
+                        banner.style.display = 'none';
+                    }
+                } else {
+                    dot.className = 'status-dot';
+                    text.innerHTML = 'Meta Configuration Missing';
+                }
+            } catch (e) {
+                console.error("Health check failed:", e);
+            }
+        }
+
+        async function checkAIStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/api/ai/status`);
+                const data = await res.json();
+                
+                updateAIIndicator('groq', data.groq);
+                updateAIIndicator('openai', data.openai);
+                updateAIIndicator('gemini', data.gemini);
+            } catch (e) {
+                console.error("Failed to check AI status:", e);
+            }
+        }
+
+        function updateAIIndicator(provider, status) {
+            const el = document.getElementById(`status-${provider}`);
+            if (!el) return;
+            
+            if (status && status.configured && status.reachable) {
+                el.style.color = '#10b981'; // green
+                el.style.opacity = '1';
+                el.style.textShadow = '0 0 8px rgba(16, 185, 129, 0.4)';
+                el.title = `${provider.toUpperCase()} is connected and reachable`;
+            } else if (status && status.configured && !status.reachable) {
+                el.style.color = '#ef4444'; // red
+                el.style.opacity = '1';
+                el.style.textShadow = '0 0 8px rgba(239, 68, 68, 0.4)';
+                el.title = `${provider.toUpperCase()} configured but offline: ${status.error || 'Connection error'}`;
+            } else {
+                el.style.color = 'var(--text-muted)';
+                el.style.opacity = '0.4';
+                el.style.textShadow = 'none';
+                el.title = `${provider.toUpperCase()} is not configured`;
+            }
+        }
+
+        async function loadConversations(isSilent = false) {
+            try {
+                const res = await fetch(`${API_BASE}/api/facebook/conversations`);
+                const data = await res.json();
+                
+                conversations = data.conversations || [];
+                renderConversations();
+            } catch (e) {
+                console.error("Failed to load conversations:", e);
+            }
+        }
+
+        function renderConversations() {
+            const list = document.getElementById('conv-list');
+            if (conversations.length === 0) {
+                list.innerHTML = `
+                    <div style="padding: 30px 20px; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
+                        <i class="fa-regular fa-message" style="font-size: 1.5rem; margin-bottom: 8px; display: block; opacity: 0.5;"></i>
+                        No active conversations yet.
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            conversations.forEach(c => {
+                const isActive = activeChat && activeChat.user_id === c.user_id && activeChat.platform === c.platform;
+                const initials = (c.participant_name || 'U').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+                
+                let timeStr = '---';
+                if (c.updated_time) {
+                    const date = new Date(c.updated_time);
+                    timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                }
+
+                html += `
+                    <div class="conv-item ${isActive ? 'active' : ''}" onclick="selectChat('${c.user_id}', '${c.platform}')">
+                        <div class="avatar">
+                            ${initials}
+                            <div class="platform-badge ${c.platform}">
+                                <i class="${c.platform === 'messenger' ? 'fa-brands fa-facebook-messenger' : c.platform === 'whatsapp' ? 'fa-brands fa-whatsapp' : 'fa-solid fa-gamepad'}"></i>
+                            </div>
+                        </div>
+                        <div class="conv-details">
+                            <div class="conv-name-row">
+                                <div class="conv-name">${c.participant_name || 'Anonymous User'}</div>
+                                <div class="conv-time">${timeStr}</div>
+                            </div>
+                            <div class="conv-preview">${c.last_message || 'No messages'}</div>
+                            <div class="conv-badges">
+                                ${c.human_handoff ? '<span class="handoff-badge">Human Takeover</span>' : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+            list.innerHTML = html;
+        }
+
+        async function selectChat(userId, platform) {
+            const selected = conversations.find(c => c.user_id === userId && c.platform === platform);
+            if (!selected) return;
+
+            activeChat = selected;
+            renderConversations();
+
+            // Show panels
+            document.getElementById('chat-header').style.display = 'flex';
+            document.getElementById('chat-footer').style.display = 'flex';
+            document.getElementById('inspector-panel').style.display = 'flex';
+
+            // Populate inspector details
+            document.getElementById('inspect-name').innerText = selected.participant_name || 'Anonymous';
+            document.getElementById('inspect-platform').innerText = selected.platform.toUpperCase();
+            document.getElementById('inspect-id').innerText = selected.user_id;
+            
+            // Format active header
+            document.getElementById('active-avatar').innerText = (selected.participant_name || 'U').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+            document.getElementById('active-username').innerText = selected.participant_name || 'Anonymous';
+            document.getElementById('active-meta').innerText = `${selected.platform.toUpperCase()} • ID: ${selected.user_id}`;
+            document.getElementById('handoff-toggle').checked = selected.human_handoff;
+            document.getElementById('inspect-ai-status').innerText = selected.human_handoff ? 'Paused (Human Takeover)' : 'Active (AI Auto-Reply)';
+
+            // Fetch and render messages
+            await loadActiveChatMessages();
+        }
+
+        async function loadActiveChatMessages(isSilent = false) {
+            if (!activeChat) return;
+            try {
+                const res = await fetch(`${API_BASE}/api/facebook/conversations/${activeChat.conversation_id}/messages?platform=${activeChat.platform}&user_id=${activeChat.user_id}&participant_name=${encodeURIComponent(activeChat.participant_name)}`);
+                const data = await res.json();
+                
+                renderMessages(data.messages || [], data.session || null);
+            } catch (e) {
+                console.error("Failed to load messages:", e);
+            }
+        }
+
+        function renderMessages(messages, session) {
+            const chatLog = document.getElementById('chat-messages');
+            
+            // Save scroll position
+            const wasAtBottom = chatLog.scrollHeight - chatLog.scrollTop <= chatLog.clientHeight + 40;
+
+            if (messages.length === 0) {
+                chatLog.innerHTML = `
+                    <div style="flex:1; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:0.9rem;">
+                        No messages in this conversation.
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            messages.forEach(msg => {
+                const role = msg.role; // "user", "assistant", "system", "tool"
+                const isUser = role === 'user';
+                const content = msg.content || '';
+
+                if (role === 'system') return; // Hide system messages
+
+                let senderClass = '';
+                let senderLabel = '';
+                if (isUser) {
+                    senderClass = 'incoming';
+                    senderLabel = 'Customer';
+                } else if (role === 'tool') {
+                    senderClass = 'outgoing tool';
+                    senderLabel = `Tool: ${msg.name || 'API'}`;
+                } else {
+                    // Assistant message (AI or Human)
+                    senderClass = 'outgoing';
+                    const isManual = msg.sender_type === 'human' || (msg.metadata && msg.metadata.sender_type === 'human');
+                    senderLabel = isManual ? 'Human Agent' : 'AI Salesman';
+                    senderClass += isManual ? ' human' : ' bot';
+                }
+
+                // Check for attachments/links inside content and render nicely
+                let displayContent = formatMessageText(content);
+
+                // Handle mock attachment render (if any tool result or metadata contains details)
+                let attachmentsHtml = '';
+                if (msg.tool_calls) {
+                    attachmentsHtml += `<div style="font-family: monospace; font-size: 0.72rem; opacity:0.8; margin-top:5px; border-top:1px solid rgba(255,255,255,0.1); padding-top:4px;">
+                        <strong>Requested Tool:</strong> ${msg.tool_calls[0].name}
+                    </div>`;
+                }
+
+                html += `
+                    <div class="msg-row ${isUser ? 'incoming' : 'outgoing'}">
+                        <div class="msg-wrapper ${senderClass}">
+                            <div class="msg-bubble">${displayContent}${attachmentsHtml}</div>
+                            <div class="msg-info">
+                                <span class="sender-tag">${senderLabel}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            if (isTyping) {
+                html += `
+                    <div class="msg-row incoming">
+                        <div class="msg-wrapper incoming">
+                            <div class="typing-bubble">
+                                <span class="typing-dot"></span>
+                                <span class="typing-dot"></span>
+                                <span class="typing-dot"></span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            chatLog.innerHTML = html;
+
+            // Scroll to bottom if was at bottom
+            if (wasAtBottom) {
+                chatLog.scrollTop = chatLog.scrollHeight;
+            }
+
+            // Update raw JSON preview
+            if (session) {
+                document.getElementById('inspect-json').innerText = JSON.stringify(session, null, 2);
+                document.getElementById('handoff-toggle').checked = session.human_handoff;
+                document.getElementById('inspect-ai-status').innerText = session.human_handoff ? 'Paused (Human Takeover)' : 'Active (AI Auto-Reply)';
+                document.getElementById('inspect-last-active').innerText = new Date(session.last_active * 1000).toLocaleTimeString();
+                
+                // Update role selector dropdown value
+                const userRole = (session.metadata && session.metadata.role) || "Customer";
+                const roleSelect = document.getElementById('inspect-role');
+                if (roleSelect) {
+                    roleSelect.value = userRole;
+                }
+            }
+        }
+
+        function formatMessageText(text) {
+            // Replace newlines with <br>
+            let formatted = text.replace(/\n/g, '<br>');
+            // Bold markup **text** -> <strong>text</strong>
+            formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+            // Link formatting [link](url)
+            formatted = formatted.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank" style="color:#a5b4fc; text-decoration:underline;">$1</a>');
+            return formatted;
+        }
+
+        // ── Actions ──
+        async function sendMessage() {
+            if (!activeChat) return;
+            const input = document.getElementById('message-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const mode = document.getElementById('send-mode').value; // "human" or "ai"
+
+            // Optimistically add message
+            input.value = '';
+            
+            try {
+                if (mode === 'ai') {
+                    isTyping = true;
+                    loadActiveChatMessages();
+                }
+
+                const res = await fetch(`${API_BASE}/api/facebook/send`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        user_id: activeChat.user_id,
+                        platform: activeChat.platform,
+                        text: text,
+                        sender: mode
+                    })
+                });
+                
+                const data = await res.json();
+                
+                isTyping = false;
+                await loadActiveChatMessages();
+                await loadConversations();
+            } catch (e) {
+                console.error("Failed to send message:", e);
+                isTyping = false;
+            }
+        }
+
+        async function toggleHandoff() {
+            if (!activeChat) return;
+            const toggle = document.getElementById('handoff-toggle');
+            const targetVal = toggle.checked; // note: click already toggled checkbox value
+
+            try {
+                const res = await fetch(`${API_BASE}/api/facebook/conversations/${activeChat.platform}/${activeChat.user_id}/handoff`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ human_handoff: targetVal })
+                });
+                
+                await loadActiveChatMessages();
+                await loadConversations();
+            } catch (e) {
+                console.error("Failed to toggle handoff:", e);
+            }
+        }
+
+        async function resetActiveSession() {
+            if (!activeChat) return;
+            if (!confirm("Are you sure you want to reset this customer session history? This clears all message logs in memory.")) return;
+
+            try {
+                await fetch(`${API_BASE}/api/facebook/conversations/${activeChat.platform}/${activeChat.user_id}/reset`, {
+                    method: 'POST'
+                });
+                await loadActiveChatMessages();
+                await loadConversations();
+            } catch (e) {
+                console.error("Failed to reset session:", e);
+            }
+        }
+
+        async function triggerManualAIResponse() {
+            if (!activeChat) return;
+            isTyping = true;
+            loadActiveChatMessages();
+
+            try {
+                const res = await fetch(`${API_BASE}/api/facebook/conversations/${activeChat.platform}/${activeChat.user_id}/ai-respond`, {
+                    method: 'POST'
+                });
+                isTyping = false;
+                await loadActiveChatMessages();
+                await loadConversations();
+            } catch (e) {
+                console.error("Failed to force AI response:", e);
+                isTyping = false;
+            }
+        }
+
+        async function updateUserRole() {
+            if (!activeChat) return;
+            const newRole = document.getElementById('inspect-role').value;
+            try {
+                const res = await fetch(`${API_BASE}/api/users/update-role`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        platform: activeChat.platform,
+                        user_id: activeChat.user_id,
+                        role: newRole
+                    })
+                });
+                
+                if (res.ok) {
+                    // Update activeChat metadata locally
+                    if (!activeChat.metadata) activeChat.metadata = {};
+                    activeChat.metadata.role = newRole;
+                    
+                    // Reload active chat messages to refresh raw JSON session preview
+                    await loadActiveChatMessages(true);
+                    
+                    alert(`User role updated to ${newRole} successfully.`);
+                } else {
+                    const err = await res.json();
+                    alert("Failed to update user role: " + err.error);
+                }
+            } catch (e) {
+                console.error("Error updating user role:", e);
+                alert("Error updating user role.");
+            }
+        }
+
+        function applyShortcut(text) {
+            const input = document.getElementById('message-input');
+            input.value = text;
+            input.focus();
+        }
+
+        function handleInputKey(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        }
+
+        // ── Simulator Modal ──
+        function openSimulateModal() {
+            document.getElementById('simulate-modal').style.display = 'flex';
+            document.getElementById('sim-name').focus();
+        }
+
+        function closeSimulateModal() {
+            document.getElementById('simulate-modal').style.display = 'none';
+        }
+
+        async function submitSimulate() {
+            const name = document.getElementById('sim-name').value.trim();
+            const platform = document.getElementById('sim-platform').value;
+            const customId = document.getElementById('sim-id').value.trim();
+            const initMsg = document.getElementById('sim-message').value.trim();
+            const role = document.getElementById('sim-role').value;
+
+            if (!name) {
+                alert("Please enter customer name");
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/api/facebook/simulate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name: name,
+                        platform: platform,
+                        user_id: customId || null,
+                        initial_message: initMsg || null,
+                        role: role
+                    })
+                });
+                const data = await res.json();
+                
+                closeSimulateModal();
+                // Clear fields
+                document.getElementById('sim-name').value = '';
+                document.getElementById('sim-id').value = '';
+                document.getElementById('sim-message').value = 'Hello!';
+
+                await loadConversations();
+                // Select the newly simulated chat
+                selectChat(data.user_id, data.platform);
+            } catch (e) {
+                console.error("Failed to simulate customer:", e);
+            }
+        }
+
+        // ── AI Guidelines & Context Management ──
+        let globalContexts = [];
+
+        async function openGuidelinesModal() {
+            try {
+                // Fetch all contexts
+                const res = await fetch(`${API_BASE}/api/contexts`);
+                globalContexts = await res.json();
+
+                document.getElementById('guidelines-modal').style.display = 'flex';
+                
+                // Reset to list view default
+                backToContextListView();
+                
+                // Render list
+                renderContextList();
+            } catch (e) {
+                console.error("Failed to load contexts:", e);
+                alert("Error loading AI guidelines and contexts");
+            }
+        }
+
+        function closeGuidelinesModal() {
+            document.getElementById('guidelines-modal').style.display = 'none';
+        }
+
+        function renderContextList() {
+            const container = document.getElementById('contexts-list-container');
+            container.innerHTML = '';
+            
+            if (globalContexts.length === 0) {
+                container.innerHTML = `
+                    <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
+                        No contexts configured yet. Click "+ Create Context" to add one.
+                    </div>
+                `;
+                return;
+            }
+            
+            globalContexts.forEach(c => {
+                const item = document.createElement('div');
+                item.className = 'context-item';
+                item.style = 'display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-radius: 8px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;';
+                
+                const isUniversal = c.context_type === 'universal';
+                const isChecked = isUniversal || c.is_active;
+                
+                item.innerHTML = `
+                    <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0;">
+                        <span style="font-weight: 600; font-size: 0.95rem; color: var(--text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            ${c.context_name}
+                        </span>
+                        <span style="font-size: 0.75rem; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                            ${c.description || 'No description'}
+                        </span>
+                    </div>
+                    
+                    <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
+                        <!-- Badge -->
+                        <span class="badge" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 500; text-transform: uppercase; background: ${isUniversal ? 'rgba(59,130,246,0.15); color: #60a5fa;' : 'rgba(168,85,247,0.15); color: #c084fc;'}">
+                            ${isUniversal ? 'Universal' : 'Special'}
+                        </span>
+                        
+                        <!-- Toggle (only for non-universal) -->
+                        ${isUniversal ? `
+                            <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px;">Always Active</span>
+                        ` : `
+                            <div class="toggle-container" style="display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); cursor: pointer;" onclick="event.stopPropagation();">
+                                <span id="toggle-label-${c.id}" style="font-size: 0.75rem; color: ${isChecked ? '#34d399' : 'var(--text-muted)'}; font-weight: 500;">
+                                    ${isChecked ? 'Active' : 'Inactive'}
+                                </span>
+                                <label class="switch">
+                                    <input type="checkbox" id="toggle-${c.id}" ${isChecked ? 'checked' : ''} onchange="toggleContextCheck('${c.id}', this.checked)">
+                                    <span class="slider"></span>
+                                </label>
+                            </div>
+                        `}
+                        
+                        <!-- Edit Button -->
+                        <button class="btn btn-secondary" onclick="showEditContextView('${c.id}')" style="margin: 0; padding: 4px 10px; font-size: 0.8rem; display: flex; align-items: center; gap: 4px; border-color: rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); height: 30px;">
+                            <i class="fa-solid fa-pen-to-square"></i> Edit
+                        </button>
+                    </div>
+                `;
+                container.appendChild(item);
+            });
+        }
+
+        async function toggleContextCheck(id, checked) {
+            try {
+                const res = await fetch(`${API_BASE}/api/contexts/toggle-active`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id, is_active: checked })
+                });
+                
+                if (res.ok) {
+                    // Update local globalContexts item state
+                    const ctx = globalContexts.find(c => c.id === id);
+                    if (ctx) {
+                        ctx.is_active = checked;
+                    }
+                    renderContextList();
+                } else {
+                    const err = await res.json();
+                    alert("Failed to toggle status: " + err.error);
+                    renderContextList();
+                }
+            } catch (e) {
+                console.error("Error toggling active context:", e);
+                alert("Error toggling active status");
+                renderContextList();
+            }
+        }
+
+        function showCreateContextView() {
+            // Clear inputs
+            document.getElementById('edit-context-id').value = '';
+            document.getElementById('context-name-input').value = '';
+            document.getElementById('context-desc-input').value = '';
+            document.getElementById('guidelines-textarea').value = '';
+            document.getElementById('context-type-select').value = 'special';
+            
+            document.getElementById('context-edit-title').innerHTML = `
+                <i class="fa-solid fa-plus" style="color:var(--accent-color);"></i> Create New Context
+            `;
+            
+            // Switch view
+            document.getElementById('context-list-view').style.display = 'none';
+            document.getElementById('context-edit-view').style.display = 'flex';
+            
+            // Focus name input
+            document.getElementById('context-name-input').focus();
+        }
+
+        function showEditContextView(id) {
+            const ctx = globalContexts.find(c => c.id === id);
+            if (!ctx) return;
+            
+            // Populate inputs
+            document.getElementById('edit-context-id').value = ctx.id || '';
+            document.getElementById('context-name-input').value = ctx.context_name || '';
+            document.getElementById('context-desc-input').value = ctx.description || '';
+            document.getElementById('guidelines-textarea').value = ctx.text || '';
+            document.getElementById('context-type-select').value = ctx.context_type || 'special';
+            
+            document.getElementById('context-edit-title').innerHTML = `
+                <i class="fa-solid fa-pen-to-square" style="color:var(--accent-color);"></i> Edit Context: ${ctx.context_name}
+            `;
+            
+            // Switch view
+            document.getElementById('context-list-view').style.display = 'none';
+            document.getElementById('context-edit-view').style.display = 'flex';
+        }
+
+        function backToContextListView() {
+            document.getElementById('context-edit-view').style.display = 'none';
+            document.getElementById('context-list-view').style.display = 'flex';
+        }
+
+        async function saveCurrentContext() {
+            const id = document.getElementById('edit-context-id').value;
+            const name = document.getElementById('context-name-input').value.trim();
+            const desc = document.getElementById('context-desc-input').value.trim();
+            const text = document.getElementById('guidelines-textarea').value.trim();
+            const type = document.getElementById('context-type-select').value;
+
+            if (!name || !text) {
+                alert("Context Name and Guidelines Text are required!");
+                return;
+            }
+
+            const payload = {
+                context_name: name,
+                text: text,
+                description: desc,
+                context_type: type
+            };
+
+            // Maintain active state if editing
+            if (id) {
+                payload.id = id;
+                const existing = globalContexts.find(c => c.id === id);
+                if (existing) {
+                    payload.is_active = type === 'universal' ? true : existing.is_active;
+                }
+            } else {
+                payload.is_active = type === 'universal' ? true : false;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/api/contexts`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    alert("Failed to save context: " + err.error);
+                    return;
+                }
+
+                // Re-fetch all contexts to refresh list
+                const listRes = await fetch(`${API_BASE}/api/contexts`);
+                globalContexts = await listRes.json();
+
+                renderContextList();
+                backToContextListView();
+                alert("Context saved successfully.");
+            } catch (e) {
+                console.error("Error saving context:", e);
+                alert("Error saving context to database.");
+            }
+        }
+
+        async function openOrdersModal() {
+            try {
+                const res = await fetch(`${API_BASE}/api/orders/confirmed`);
+                const data = await res.json();
+                const tbody = document.getElementById('orders-table-body');
+                
+                let html = '';
+                if (!data.orders || data.orders.length === 0) {
+                    html = `
+                        <tr>
+                            <td colspan="5" style="padding: 24px; text-align: center; color: var(--text-muted);">
+                                No confirmed orders yet.
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    data.orders.forEach(o => {
+                        html += `
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                                <td style="padding: 12px 16px; white-space: nowrap; color: var(--text-muted);">${o.timestamp || '---'}</td>
+                                <td style="padding: 12px 16px; font-weight: 500; color: white;">${o.name || '---'}</td>
+                                <td style="padding: 12px 16px; font-family: monospace; color: #10b981;">${o.phone || '---'}</td>
+                                <td style="padding: 12px 16px; color: var(--text-main); max-width: 200px; word-break: break-word;">${o.address || '---'}</td>
+                                <td style="padding: 12px 16px; color: #a5b4fc; max-width: 250px; word-break: break-word;">${o.order_details || '---'}</td>
+                            </tr>
+                        `;
+                    });
+                }
+                tbody.innerHTML = html;
+                document.getElementById('orders-modal').style.display = 'flex';
+            } catch (e) {
+                console.error("Failed to load orders:", e);
+                alert("Error loading orders list");
+            }
+        }
+
+        function closeOrdersModal() {
+            document.getElementById('orders-modal').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
