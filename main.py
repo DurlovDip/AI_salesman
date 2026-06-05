@@ -357,14 +357,20 @@ async def lifespan(app: FastAPI):
     # Start cleanup task
     cleanup_task = asyncio.create_task(_cleanup_sessions_loop())
     # Start polling task (acts as local webhook fallback)
-    polling_task = asyncio.create_task(_poll_facebook_loop())
+    # Disable polling loop on Vercel to prevent duplicate replies in serverless environment
+    polling_task = None
+    if not os.getenv("VERCEL"):
+        polling_task = asyncio.create_task(_poll_facebook_loop())
+    else:
+        logger.info("ℹ️ Running on Vercel: disabling Facebook polling loop to prevent duplicate replies")
     # Start local data migration task
     asyncio.create_task(sync_local_data_to_supabase())
 
     yield
 
     cleanup_task.cancel()
-    polling_task.cancel()
+    if polling_task:
+        polling_task.cancel()
     logger.info("👋 AI Salesman shutting down")
 
 
