@@ -247,12 +247,7 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
         return
     # ──────────────────────────────────────────────────────────────────────────
 
-    # ── ONLY AUTO-REPLY TO ADMIN AND TESTER ───────────────────────────────────
-    user_role = session.metadata.get("role", "Customer")
-    if user_role not in ("Admin", "Tester"):
-        logger.info(f"⏭️ Skipping AI auto-reply for user {sender_id} ({full_name}) because role is {user_role} (not Admin or Tester)")
-        return
-    # ──────────────────────────────────────────────────────────────────────────
+
 
     # Show typing indicator
     await messenger_api.mark_seen(sender_id)

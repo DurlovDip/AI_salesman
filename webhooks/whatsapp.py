@@ -258,12 +258,7 @@ async def _respond_to_user(
         session.add_message("assistant", confirmation_reply)
         await whatsapp_api.send_text_chunked(phone, confirmation_reply)
         return
-    # ── ONLY AUTO-REPLY TO ADMIN AND TESTER ───────────────────────────────────
-    user_role = session.metadata.get("role", "Customer")
-    if user_role not in ("Admin", "Tester"):
-        logger.info(f"⏭️ Skipping AI auto-reply for WhatsApp user {phone} ({user_name}) because role is {user_role} (not Admin or Tester)")
-        return
-    # ──────────────────────────────────────────────────────────────────────────
+
 
     try:
         # Get AI response with tools
