@@ -36,6 +36,8 @@ class ConversationSession:
         self.messages = messages if messages is not None else []
         self.last_active = last_active if last_active is not None else time.time()
         self.metadata = metadata if metadata is not None else {}
+        self.metadata.pop("is_processing", None)  # Clean up legacy persisted flags
+        self.is_processing = False
         self._human_handoff = human_handoff
 
     @property

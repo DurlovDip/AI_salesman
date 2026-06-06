@@ -101,7 +101,7 @@ async def _poll_facebook_loop() -> None:
                 user_role = session.metadata.get("role", "Customer")
                 if user_role not in ("Admin", "Tester"):
                     continue
-                if session.metadata.get("is_processing"):
+                if session.is_processing:
                     continue
 
                 # Fetch message history to see if the last message is from the user
@@ -154,7 +154,7 @@ async def _poll_facebook_loop() -> None:
                         user_text = session.messages[-1]["content"]
                         logger.info(f"🔄 Polling detected new message from Dip Durlov: '{user_text}'. Triggering AI...")
 
-                        session.metadata["is_processing"] = True
+                        session.is_processing = True
                         try:
                             # ── TESTER COMMAND INTERCEPTION ──────────────────────
                             from tester_commands import handle_tester_command
@@ -195,7 +195,7 @@ async def _poll_facebook_loop() -> None:
                         except Exception as poll_err:
                             logger.error(f"Error generating or sending polling response: {poll_err}")
                         finally:
-                            session.metadata["is_processing"] = False
+                            session.is_processing = False
                             await messenger_api.send_typing_off(p_id)
         except Exception as e:
             logger.error(f"Error in polling loop: {e}")
