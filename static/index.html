@@ -1474,6 +1474,19 @@
             if (!selected) return;
 
             activeChat = selected;
+
+            // Reset render cache so the new chat always renders immediately
+            _lastRenderedMsgCount = -1;
+            _lastRenderedHandoff = null;
+
+            // Show a loading skeleton in the chat window while messages fetch
+            const chatLog = document.getElementById('chat-messages');
+            chatLog.innerHTML = `
+                <div style="flex:1; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:0.9rem; gap:8px;">
+                    <i class="fa-solid fa-spinner fa-spin"></i> Loading messages...
+                </div>
+            `;
+
             renderConversations();
 
             // Show panels
@@ -1500,7 +1513,10 @@
         async function loadActiveChatMessages(isSilent = false) {
             if (!activeChat) return;
             try {
-                const res = await apiFetch(`${API_BASE}/api/facebook/conversations/${activeChat.conversation_id}/messages?platform=${activeChat.platform}&user_id=${activeChat.user_id}&participant_name=${encodeURIComponent(activeChat.participant_name)}`);
+                // On silent polls, fetch from local cache only (fast, no Graph API call).
+                // On first open (isSilent=false), pass force_sync=true to pull latest from Meta.
+                const syncParam = isSilent ? 'false' : 'true';
+                const res = await apiFetch(`${API_BASE}/api/facebook/conversations/${activeChat.conversation_id}/messages?platform=${activeChat.platform}&user_id=${activeChat.user_id}&participant_name=${encodeURIComponent(activeChat.participant_name)}&force_sync=${syncParam}`);
                 const data = await res.json();
 
                 renderMessages(data.messages || [], data.session || null);
@@ -1509,11 +1525,24 @@
             }
         }
 
+        // Track last rendered state to avoid unnecessary re-renders on silent polls
+        let _lastRenderedMsgCount = -1;
+        let _lastRenderedHandoff = null;
+
         function renderMessages(messages, session) {
             const chatLog = document.getElementById('chat-messages');
 
-            // Save scroll position
-            const wasAtBottom = chatLog.scrollHeight - chatLog.scrollTop <= chatLog.clientHeight + 40;
+            // On silent polls, skip full re-render if nothing changed — prevents flicker
+            const msgCount = messages.length;
+            const handoffState = session ? session.human_handoff : null;
+            if (msgCount === _lastRenderedMsgCount && handoffState === _lastRenderedHandoff) {
+                return;
+            }
+            _lastRenderedMsgCount = msgCount;
+            _lastRenderedHandoff = handoffState;
+
+            // Only auto-scroll if user was already at the bottom
+            const wasAtBottom = chatLog.scrollHeight - chatLog.scrollTop <= chatLog.clientHeight + 60;
 
             if (messages.length === 0) {
                 chatLog.innerHTML = `
@@ -1685,6 +1714,9 @@
                 await apiFetch(`${API_BASE}/api/facebook/conversations/${activeChat.platform}/${activeChat.user_id}/reset`, {
                     method: 'POST'
                 });
+                // Force re-render after reset
+                _lastRenderedMsgCount = -1;
+                _lastRenderedHandoff = null;
                 await loadActiveChatMessages();
                 await loadConversations();
             } catch (e) {

@@ -70,10 +70,10 @@ async def _poll_facebook_loop() -> None:
             }
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(url, params=params)
-                
+
             if response.status_code != 200:
                 continue
-                
+
             data = response.json()
             for item in data.get("data", []):
                 part_data = item.get("participants", {}).get("data", [])
@@ -84,7 +84,7 @@ async def _poll_facebook_loop() -> None:
                     p_info = other_parts[0] if other_parts else part_data[0]
                     p_id = p_info.get("id", "unknown")
                     p_name = p_info.get("name", "Facebook User")
-                
+
                 # Track user in Supabase immediately
                 if p_id != "unknown":
                     from database import db
@@ -94,16 +94,16 @@ async def _poll_facebook_loop() -> None:
                             user_id=p_id,
                             name=p_name
                         )
-                
+
                 session = await conversation_manager.get_or_create("messenger", p_id)
-                
+
                 # Exclusively respond to Admin and Tester roles during testing
                 user_role = session.metadata.get("role", "Customer")
                 if user_role not in ("Admin", "Tester"):
                     continue
                 if session.metadata.get("is_processing"):
                     continue
-                
+
                 # Fetch message history to see if the last message is from the user
                 conv_id = item.get("id")
                 msg_url = f"https://graph.facebook.com/v21.0/{conv_id}"
@@ -113,28 +113,28 @@ async def _poll_facebook_loop() -> None:
                 }
                 async with httpx.AsyncClient(timeout=10.0) as client2:
                     msg_response = await client2.get(msg_url, params=msg_params)
-                
+
                 if msg_response.status_code != 200:
                     continue
-                    
+
                 msg_data = msg_response.json()
                 fb_messages = msg_data.get("messages", {}).get("data", [])
                 if not fb_messages:
                     continue
-                
+
                 # Reverse to get chronological order
                 fb_messages.reverse()
-                
+
                 # Check if the last message is from the customer
                 last_fb_msg = fb_messages[-1]
                 last_fb_from_id = last_fb_msg.get("from", {}).get("id")
                 last_fb_msg_id = last_fb_msg.get("id")
-                
+
                 if last_fb_from_id != page_id:
                     # Skip if we already responded to this exact message ID
                     if session.metadata.get("last_responded_msg_id") == last_fb_msg_id:
                         continue
-                        
+
                     # Sync local session first to check if we already responded
                     # (In case local session is empty but we have history)
                     session.messages.clear()
@@ -148,12 +148,12 @@ async def _poll_facebook_loop() -> None:
                             await session.add_message("assistant", m_text, message_id=m_id)
                         else:
                             await session.add_message("user", m_text, message_id=m_id)
-                    
+
                     # Verify if the last message is still a 'user' message after sync
                     if session.messages and session.messages[-1]["role"] == "user":
                         user_text = session.messages[-1]["content"]
                         logger.info(f"🔄 Polling detected new message from Dip Durlov: '{user_text}'. Triggering AI...")
-                        
+
                         session.metadata["is_processing"] = True
                         try:
                             # ── TESTER COMMAND INTERCEPTION ──────────────────────
@@ -171,24 +171,24 @@ async def _poll_facebook_loop() -> None:
                                 logger.info(f"🧪 Polling: tester command handled for {p_name}")
                                 continue
                             # ────────────────────────────────────────────────────
-                            
+
                             # Show typing indicator
                             await messenger_api.mark_seen(p_id)
                             await messenger_api.send_typing_on(p_id)
-                            
+
                             from agent.salesman import get_ai_response
                             response_text, _ = await get_ai_response(
                                 messages=session.get_chat_messages(),
                                 platform="messenger",
                                 user_id=p_id,
                             )
-                            
+
                             # Send response to Facebook
                             await messenger_api.send_text_chunked(p_id, response_text)
-                            
+
                             # Mark this message ID as responded
                             session.metadata["last_responded_msg_id"] = last_fb_msg_id
-                            
+
                             # Add to session
                             await session.add_message("assistant", response_text)
                             logger.info(f"✅ Polling sent AI reply to Dip Durlov: '{response_text}'")
@@ -206,12 +206,12 @@ async def sync_local_data_to_supabase() -> None:
     from database import db, get_supabase_client
     import os
     import json
-    
+
     if not db.is_configured():
         return
-        
+
     logger.info("🔄 Checking if local orders and leads need to be migrated to Supabase...")
-    
+
     # 1. Migrate Confirmed Orders
     orders_file = os.path.join(os.path.dirname(__file__), "confirmed_orders.jsonl")
     if os.path.exists(orders_file):
@@ -221,7 +221,7 @@ async def sync_local_data_to_supabase() -> None:
                 (o.get("name"), o.get("phone"), o.get("order_details"))
                 for o in db_orders
             }
-            
+
             with open(orders_file, "r", encoding="utf-8") as f:
                 for line in f:
                     if not line.strip():
@@ -231,7 +231,7 @@ async def sync_local_data_to_supabase() -> None:
                     phone = order.get("phone")
                     address = order.get("address")
                     order_details = order.get("order_details")
-                    
+
                     if (name, phone, order_details) not in existing_orders:
                         logger.info(f"🚚 Migrating local order to Supabase for {name} ({phone})")
                         user_id = f"local_{phone.replace('+', '').strip()}"
@@ -257,12 +257,12 @@ async def sync_local_data_to_supabase() -> None:
                     res = client.table("leads").select("*").execute()
                     return res.data
                 db_leads = await asyncio.to_thread(_query)
-                
+
             existing_leads = {
                 (l.get("name"), l.get("phone"), l.get("interest"))
                 for l in db_leads
             }
-            
+
             with open(leads_file, "r", encoding="utf-8") as f:
                 for line in f:
                     if not line.strip():
@@ -273,7 +273,7 @@ async def sync_local_data_to_supabase() -> None:
                     interest = lead.get("interest")
                     platform = lead.get("platform", "local")
                     user_id = lead.get("user_id") or f"local_{phone.replace('+', '').strip()}"
-                    
+
                     if (name, phone, interest) not in existing_leads:
                         logger.info(f"👥 Migrating local lead to Supabase for {name} ({phone})")
                         await db.save_lead(
@@ -300,7 +300,7 @@ async def sync_local_data_to_supabase() -> None:
             }
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(url, params=params)
-                
+
             if response.status_code == 200:
                 data = response.json()
                 synced_count = 0
@@ -311,7 +311,7 @@ async def sync_local_data_to_supabase() -> None:
                         p_info = other_parts[0] if other_parts else part_data[0]
                         p_name = p_info.get("name", "Facebook User")
                         p_id = p_info.get("id")
-                        
+
                         if p_id and p_id != "unknown":
                             await db.create_or_update_user(
                                 platform="messenger",
@@ -324,7 +324,7 @@ async def sync_local_data_to_supabase() -> None:
                 logger.error(f"Failed to fetch conversations for startup sync: {response.text}")
         except Exception as e:
             logger.error(f"Error syncing Facebook users to Supabase on startup: {e}")
-            
+
     # Compile guidelines.txt based on active contexts
     try:
         await compile_and_save_active_guidelines()
@@ -524,26 +524,26 @@ async def compile_and_save_active_guidelines() -> str:
     from database import db
     contexts = await db.get_global_contexts()
     compiled_parts = []
-    
+
     # Sort contexts: universal first, then special so they append in a consistent, logical order
     sorted_contexts = sorted(
-        contexts, 
+        contexts,
         key=lambda c: 0 if c.get("context_type") == "universal" else 1
     )
-    
+
     for c in sorted_contexts:
         c_type = c.get("context_type", "special")
         is_act = c.get("is_active", False)
-        
+
         # Universal context is always active, special is active only if checked
         if c_type == "universal" or is_act:
             header = f"# CONTEXT: {c.get('context_name')} ({c_type.upper()})"
             text_body = c.get("text", "").strip()
             if text_body:
                 compiled_parts.append(f"{header}\n\n{text_body}")
-                
+
     compiled_text = "\n\n" + "\n\n# ======================================================\n\n".join(compiled_parts) + "\n"
-    
+
     guidelines_file = os.path.join(os.path.dirname(__file__), "guidelines.txt")
     if not os.getenv("VERCEL"):
         try:
@@ -554,7 +554,7 @@ async def compile_and_save_active_guidelines() -> str:
             logger.error(f"❌ Failed to write compiled guidelines to file: {e}")
     else:
         logger.info(f"ℹ️ Running on Vercel: skipped compiling guidelines.txt on disk (using db contexts directly)")
-        
+
     return compiled_text
 
 
@@ -563,7 +563,7 @@ async def get_contexts():
     """Get all saved guidelines contexts from database with default seed support."""
     from database import db
     contexts = await db.get_global_contexts()
-    
+
     if not contexts:
         guidelines_file = os.path.join(os.path.dirname(__file__), "guidelines.txt")
         default_text = ""
@@ -573,7 +573,7 @@ async def get_contexts():
                     default_text = f.read()
             except Exception:
                 pass
-        
+
         default_ctx = {
             "id": "c_default",
             "context_name": "Standard Sales Rules",
@@ -591,7 +591,7 @@ async def get_contexts():
             is_active=default_ctx["is_active"]
         )
         contexts = [default_ctx]
-        
+
     standardized = []
     for c in contexts:
         standardized.append({
@@ -615,10 +615,10 @@ async def create_or_update_context(body: dict = Body(...)):
     context_id = body.get("id")
     context_type = body.get("context_type", "special")
     is_active = body.get("is_active", False)
-    
+
     if not name or not text:
         return JSONResponse(status_code=400, content={"error": "Name and Text are required."})
-        
+
     res = await db.save_global_context(
         name=name,
         text=text,
@@ -627,10 +627,10 @@ async def create_or_update_context(body: dict = Body(...)):
         context_type=context_type,
         is_active=is_active
     )
-    
+
     # Re-compile guidelines.txt based on active contexts
     await compile_and_save_active_guidelines()
-    
+
     return {"status": "ok", "context": res}
 
 
@@ -640,23 +640,23 @@ async def toggle_context_active(body: dict = Body(...)):
     from database import db
     context_id = body.get("id")
     is_active = body.get("is_active", False)
-    
+
     if not context_id:
         return JSONResponse(status_code=400, content={"error": "Context ID is required."})
-        
+
     contexts = await db.get_global_contexts()
     target = None
     for c in contexts:
         if c.get("id") == context_id:
             target = c
             break
-            
+
     if not target:
         return JSONResponse(status_code=404, content={"error": f"Context '{context_id}' not found."})
-        
+
     if target.get("context_type") == "universal":
         return JSONResponse(status_code=400, content={"error": "Universal contexts are always active and cannot be deactivated."})
-        
+
     # Update active state in DB
     await db.save_global_context(
         name=target.get("context_name"),
@@ -666,10 +666,10 @@ async def toggle_context_active(body: dict = Body(...)):
         context_type=target.get("context_type"),
         is_active=is_active
     )
-    
+
     # Re-compile guidelines.txt
     await compile_and_save_active_guidelines()
-    
+
     return {"status": "ok", "message": f"Context active state set to {is_active}"}
 
 
@@ -811,7 +811,7 @@ async def api_facebook_conversations():
     conversations = []
     meta_api_error = False
     error_detail = None
-    
+
     # Try fetching from Facebook Page Graph API first
     if settings.messenger_configured:
         try:
@@ -824,7 +824,7 @@ async def api_facebook_conversations():
             }
             async with httpx.AsyncClient(timeout=10.0) as client:
                 response = await client.get(url, params=params)
-                
+
             if response.status_code == 200:
                 data = response.json()
                 for item in data.get("data", []):
@@ -836,10 +836,10 @@ async def api_facebook_conversations():
                         p_info = other_parts[0] if other_parts else part_data[0]
                         p_name = p_info.get("name", "Facebook User")
                         p_id = p_info.get("id", "unknown")
-                        
+
                     last_msg_list = item.get("messages", {}).get("data", [])
                     last_text = last_msg_list[0].get("message") if last_msg_list else "No message text"
-                    
+
                     # Track user in Supabase immediately
                     if p_id != "unknown":
                         from database import db
@@ -849,10 +849,10 @@ async def api_facebook_conversations():
                                 user_id=p_id,
                                 name=p_name
                             )
-                    
+
                     session = conversation_manager.get("messenger", p_id)
                     is_handoff = session.human_handoff if session else False
-                    
+
                     conversations.append({
                         "user_id": p_id,
                         "platform": "messenger",
@@ -869,20 +869,20 @@ async def api_facebook_conversations():
         except Exception as e:
             meta_api_error = True
             error_detail = str(e)
-            
+
     # Combine or fall back to local sessions in conversation manager
     local_sessions = []
     for key, sess in conversation_manager._sessions.items():
         user_id = sess.user_id
         platform = sess.platform
-        
+
         exists = any(c["user_id"] == user_id and c["platform"] == platform for c in conversations)
         if not exists:
             last_text = "No message history"
             if sess.messages:
                 last_msg = sess.messages[-1]
                 last_text = last_msg.get("content", "No content")
-                
+
             local_sessions.append({
                 "user_id": user_id,
                 "platform": platform,
@@ -893,9 +893,9 @@ async def api_facebook_conversations():
                 "human_handoff": sess.human_handoff,
                 "conversation_id": f"local_{user_id}"
             })
-            
+
     all_conversations = local_sessions + conversations
-    
+
     return {
         "meta_api_error": meta_api_error,
         "error_detail": error_detail,
@@ -913,7 +913,7 @@ async def fetch_paginated_messages(conversation_id: str, access_token: str, limi
         "limit": 50,
         "access_token": access_token
     }
-    
+
     async with httpx.AsyncClient(timeout=10.0) as client:
         while url and len(messages) < limit:
             try:
@@ -921,68 +921,76 @@ async def fetch_paginated_messages(conversation_id: str, access_token: str, limi
                 if response.status_code != 200:
                     logger.error(f"Failed to fetch paginated messages: {response.text}")
                     break
-                    
+
                 data = response.json()
                 page_msgs = data.get("data", [])
                 messages.extend(page_msgs)
-                
+
                 # Retrieve the next page URL
                 url = data.get("paging", {}).get("next")
                 # Clear request parameters since the "next" link already has them
                 params = {}
-                
+
                 if not page_msgs:
                     break
             except Exception as e:
                 logger.error(f"Error during paginated fetch: {e}")
                 break
-                
+
     return messages
 
 
 @app.get("/api/facebook/conversations/{conversation_id}/messages", tags=["Console"])
-async def api_facebook_messages(conversation_id: str, platform: str, user_id: str):
+async def api_facebook_messages(
+    conversation_id: str,
+    platform: str,
+    user_id: str,
+    force_sync: bool = False,
+):
     """
     Fetch messages for a conversation.
-    If it's a live conversation and the local session is empty,
-    fetch the recent messages from Meta Graph API to sync history.
+    Syncs from Meta Graph API only on first load (empty session) or when
+    force_sync=true is passed. Subsequent polls use the in-memory cache so
+    the UI stays fast and flicker-free.
     """
     session = await conversation_manager.get_or_create(platform, user_id)
-    
-    # Sync messages from Meta Graph API if it's a live thread
-    if (
+
+    # Only hit the Facebook Graph API when:
+    #  1. The local session has no messages yet (first open), OR
+    #  2. The caller explicitly requested a forced re-sync
+    should_sync = (
         not conversation_id.startswith("local_")
         and platform == "messenger"
         and settings.messenger_configured
-    ):
+        and (force_sync or len(session.messages) == 0)
+    )
+
+    if should_sync:
         try:
             page_id = settings.META_PAGE_ID
             access_token = settings.META_PAGE_ACCESS_TOKEN
-            
-            # Fetch using pagination helper!
-            fb_messages = await fetch_paginated_messages(conversation_id, access_token, limit=100)
-            
-            # Meta returns newest first, so reverse to chronological order
+
+            # Fetch last 50 messages only — enough for the console view
+            fb_messages = await fetch_paginated_messages(conversation_id, access_token, limit=50)
+
+            # Meta returns newest-first; reverse to chronological order
             fb_messages.reverse()
-            
-            # Clear and sync with live Facebook history
+
+            # Rebuild the session from live history
             session.messages.clear()
-            
             for msg in fb_messages:
                 from_id = msg.get("from", {}).get("id")
                 text = msg.get("message", "")
                 msg_id = msg.get("id")
-                
                 if not text:
                     continue
-                    
                 if from_id == page_id:
-                    # Message from page
                     await session.add_message("assistant", text, message_id=msg_id)
                     session.messages[-1]["sender_type"] = "human"
                 else:
-                    # Message from user
                     await session.add_message("user", text, message_id=msg_id)
+
+            logger.info(f"✅ Synced {len(session.messages)} messages for {user_id} from Meta Graph API")
         except Exception as e:
             logger.warning(f"⚠️ Failed to sync message history from Meta for thread {conversation_id}: {e}")
 
@@ -995,9 +1003,9 @@ async def api_facebook_messages(conversation_id: str, platform: str, user_id: st
         "metadata": session.metadata,
     }
     return {
-        "source": "local",
+        "source": "local" if not should_sync else "meta",
         "messages": messages,
-        "session": session_data
+        "session": session_data,
     }
 
 
@@ -1008,25 +1016,25 @@ async def update_user_role(body: dict = Body(...)):
     platform = body.get("platform")
     user_id = body.get("user_id")
     role = body.get("role")
-    
+
     if not platform or not user_id or not role:
         return JSONResponse(status_code=400, content={"error": "platform, user_id, and role are required."})
-        
+
     if role not in ("Admin", "Tester", "Customer"):
         return JSONResponse(status_code=400, content={"error": "Role must be Admin, Tester, or Customer."})
-        
+
     # Update DB
     await db.create_or_update_user(
         platform=platform,
         user_id=user_id,
         role=role
     )
-    
+
     # Update local session in memory if it exists
     session = conversation_manager.get(platform, user_id)
     if session:
         session.metadata["role"] = role
-        
+
     return {"status": "ok", "role": role}
 
 
@@ -1039,23 +1047,23 @@ async def api_facebook_send(
 ):
     """Send a message to a customer and optionally trigger the AI response."""
     session = await conversation_manager.get_or_create(platform, user_id)
-    
+
     if sender == "human":
         await session.set_human_handoff(True)
         await session.add_message("assistant", text)
         session.messages[-1]["sender_type"] = "human"
-        
+
         if platform == "messenger" and settings.messenger_configured:
             await messenger_api.send_text(user_id, text)
         elif platform == "whatsapp" and settings.whatsapp_configured:
             from messaging import whatsapp_api
             await whatsapp_api.send_text(user_id, text)
-            
+
         return {"status": "sent", "sender": "human"}
     else:
         # Simulate incoming user message and trigger AI response
         await session.add_message("user", text)
-        
+
         from agent.salesman import get_ai_response
         response_text, _ = await get_ai_response(
             messages=session.get_chat_messages(),
@@ -1063,13 +1071,13 @@ async def api_facebook_send(
             user_id=user_id,
         )
         await session.add_message("assistant", response_text)
-        
+
         if platform == "messenger" and settings.messenger_configured:
             await messenger_api.send_text_chunked(user_id, response_text)
         elif platform == "whatsapp" and settings.whatsapp_configured:
             from messaging import whatsapp_api
             await whatsapp_api.send_text(user_id, response_text)
-            
+
         return {"status": "processed", "response": response_text, "sender": "ai"}
 
 
@@ -1099,7 +1107,7 @@ async def api_facebook_ai_respond(platform: str, user_id: str):
     session = conversation_manager.get(platform, user_id)
     if not session:
         return JSONResponse(status_code=404, content={"detail": "Session not found"})
-        
+
     from agent.salesman import get_ai_response
     response_text, _ = await get_ai_response(
         messages=session.get_chat_messages(),
@@ -1107,13 +1115,13 @@ async def api_facebook_ai_respond(platform: str, user_id: str):
         user_id=user_id,
     )
     await session.add_message("assistant", response_text)
-    
+
     if platform == "messenger" and settings.messenger_configured:
         await messenger_api.send_text_chunked(user_id, response_text)
     elif platform == "whatsapp" and settings.whatsapp_configured:
         from messaging import whatsapp_api
         await whatsapp_api.send_text(user_id, response_text)
-        
+
     return {"status": "ok", "response": response_text}
 
 
@@ -1129,7 +1137,7 @@ async def api_facebook_simulate(
     import random
     uid = user_id or str(random.randint(100000000000000, 999999999999999))
     session = await conversation_manager.get_or_create(platform, uid, user_name=name)
-    
+
     # Update user role in Supabase and local session
     from database import db
     if db.is_configured():
@@ -1139,10 +1147,10 @@ async def api_facebook_simulate(
             role=role
         )
     session.metadata["role"] = role
-    
+
     msg = initial_message or "Hello!"
     await session.add_message("user", msg)
-    
+
     from agent.salesman import get_ai_response
     response_text, _ = await get_ai_response(
         messages=session.get_chat_messages(),
@@ -1150,7 +1158,7 @@ async def api_facebook_simulate(
         user_id=uid,
     )
     await session.add_message("assistant", response_text)
-    
+
     return {
         "status": "simulated",
         "user_id": uid,
