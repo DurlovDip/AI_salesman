@@ -164,87 +164,60 @@ async def handle_tester_command(
     # Parse arguments
     args = extract_command_arguments(user_text, matches)
     
-    # Let's check if there's an initiator command
-    initiator_match = next((m for m in matches if m[0]["command_type"] == "initiator"), None)
-    
-    if initiator_match:
-        # Start the mode!
-        cmd = initiator_match[0]
-        mode_name = cmd["mode"]
-        current_mode = mode_name
-        session.metadata["current_mode"] = mode_name
-        session.metadata["mode_state"] = {"draft": {}, "awaiting": None}
+    # Resolve handler using the modular commands registry
+    from commands.registry import get_handler
+
+    if matches:
+        # Sort matches so initiator commands run first to initialize the state correctly
+        sorted_matches = sorted(matches, key=lambda m: 0 if m[0].get("command_type") == "initiator" else 1)
         
-    # Process mediator commands
-    if current_mode:
-        # Update drafts with any mediator command values in this message
-        for cmd, _, _, _ in matches:
-            cmd_name = cmd["command"]
-            if cmd["command_type"] == "mediator" and cmd["mode"] == current_mode:
-                # Special case: @end command is sent to AI so AI can output @test_terminate
-                if cmd_name == "end":
-                    # Clear current_mode locally so AI receives the message, but do not terminate session yet.
-                    return False, None
-                
-                session.metadata["mode_state"]["draft"][cmd_name] = args.get(cmd_name, "")
-                session.metadata["mode_state"]["awaiting"] = None
-                
-        # If no commands matched, but we are in a mode and awaiting input, assign text to draft
-        if not matches and session.metadata["mode_state"].get("awaiting"):
-            awaiting = session.metadata["mode_state"]["awaiting"]
-            clean_text = clean_plain_input(user_text, f"@{awaiting}")
-            session.metadata["mode_state"]["draft"][awaiting] = clean_text
-            session.metadata["mode_state"]["awaiting"] = None
+        last_handled = False
+        last_reply = None
 
-        # Manage the step-by-step state machine flows based on mode
-        if current_mode == "testing":
-            draft = session.metadata["mode_state"]["draft"]
-            
-            # Check for missing parameters
-            if not draft.get("title"):
-                session.metadata["mode_state"]["awaiting"] = "title"
-                if db.is_configured():
-                    await db.create_or_update_user(platform=platform, user_id=user_id, metadata=session.metadata)
-                return True, "Please enter the title for the new context:"
-                
-            if not draft.get("context"):
-                session.metadata["mode_state"]["awaiting"] = "context"
-                if db.is_configured():
-                    await db.create_or_update_user(platform=platform, user_id=user_id, metadata=session.metadata)
-                return True, "Please enter the context rules/text:"
-
-            # We have both title and context. Save it!
-            title = draft["title"]
-            context_text = draft["context"]
-            context_type = draft.get("type", "universal")
-            if context_type not in ("universal", "special"):
-                context_type = "universal"
-                
-            # Clear state
-            session.metadata.pop("current_mode", None)
-            session.metadata.pop("mode_state", None)
-            
-            if db.is_configured():
-                await db.create_or_update_user(platform=platform, user_id=user_id, metadata=session.metadata)
-
-            try:
-                # Save to database
-                await db.save_global_context(
-                    name=title,
-                    text=context_text,
-                    description=f"Created by tester {user_name} ({platform}:{user_id})",
-                    context_type=context_type,
-                    is_active=(context_type == "universal"),
+        for cmd_record, start, end, word in sorted_matches:
+            cmd_name = cmd_record["command"]
+            handler = get_handler(cmd_name)
+            if handler:
+                handled, reply = await handler.execute(
+                    session=session,
+                    platform=platform,
+                    user_id=user_id,
+                    command_record=cmd_record,
+                    arguments=args,
+                    user_text=user_text,
+                    user_name=user_name,
+                    user_role=user_role
                 )
+                if handled:
+                    last_handled = True
+                    if reply is not None:
+                        last_reply = reply
 
-                # Re-compile guidelines
-                from main import compile_and_save_active_guidelines
-                await compile_and_save_active_guidelines()
+        if last_handled:
+            return last_handled, last_reply
 
-                return True, "@confirmation\nContext is added & thanks for making me better"
-            except Exception as e:
-                logger.error(f"Failed to save context from tester command: {e}")
-                return True, f"❌ Failed to add context '{title}'.\nError: {str(e)}\n\nType @testing to try again."
+    # Handle plain response text if we are in an active mode and awaiting a parameter
+    elif current_mode:
+        mode_cmds = [c for c in db_commands if c.get("mode") == current_mode]
+        if mode_cmds:
+            # Map active mode to the handler of its first command record
+            handler = get_handler(mode_cmds[0]["command"])
+            if handler:
+                mock_record = {
+                    "command": None,
+                    "command_type": None,
+                }
+                handled, reply = await handler.execute(
+                    session=session,
+                    platform=platform,
+                    user_id=user_id,
+                    command_record=mock_record,
+                    arguments={},
+                    user_text=user_text,
+                    user_name=user_name,
+                    user_role=user_role
+                )
+                return handled, reply
 
     return False, None
 
@@ -265,39 +238,25 @@ async def handle_ai_response_commands(platform: str, user_id: str, text: str) ->
     cleaned_text = text
     session = await conversation_manager.get_or_create(platform, user_id)
 
+    from commands.registry import get_handler
+
     for cmd, start, end, word in matches:
         cmd_name = cmd["command"]
-        cmd_type = cmd["command_type"]
-        
-        logger.info(f"🤖 Intercepted AI command: {word} (type: {cmd_type})")
+        logger.info(f"🤖 Intercepted AI command: {word} (type: {cmd.get('command_type')})")
 
-        # 1. Execute actions/side-effects
-        if cmd_name == "notification":
-            # Send notification to admins
-            try:
-                admins = await db.get_admin_users()
-                if not admins:
-                    # Default fallback admin
-                    admins = [{"platform": "messenger", "user_id": "26761204070240994", "name": "Dip Durlov"}]
-                
-                notification_msg = f"🔔 AI Notification Alert: The AI Salesman requested attention for customer {user_id} on {platform}."
-                for admin in admins:
-                    adm_plat = admin.get("platform")
-                    adm_uid = admin.get("user_id")
-                    if adm_plat and adm_uid:
-                        # Send notification to admin
-                        from agent.tool_executor import _send_platform_text
-                        await _send_platform_text(adm_plat, adm_uid, notification_msg)
-            except Exception as e:
-                logger.error(f"Failed to send admin notification: {e}")
-
-        elif cmd_name == "test_terminate":
-            # Terminate testing mode
-            session.metadata.pop("current_mode", None)
-            session.metadata.pop("mode_state", None)
-            if db.is_configured():
-                await db.create_or_update_user(platform=platform, user_id=user_id, metadata=session.metadata)
-            logger.info("🧪 Testing mode terminated by AI.")
+        # 1. Resolve and execute command handler dynamically
+        handler = get_handler(cmd_name)
+        if handler:
+            await handler.execute(
+                session=session,
+                platform=platform,
+                user_id=user_id,
+                command_record=cmd,
+                arguments={},
+                user_text=text,
+                user_name="AI",
+                user_role="AI"
+            )
 
         # 2. Strip the command token from the final output text
         cleaned_text = cleaned_text.replace(word, "").strip()
