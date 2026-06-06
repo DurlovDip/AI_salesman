@@ -233,17 +233,7 @@ async def collect_lead(
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
 
-    # Save to local file (fallback/backup) if not running on Vercel
-    if not os.getenv("VERCEL"):
-        leads_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "leads")
-        os.makedirs(leads_dir, exist_ok=True)
-        leads_file = os.path.join(leads_dir, "leads.jsonl")
-
-        try:
-            with open(leads_file, "a") as f:
-                f.write(json.dumps(lead) + "\n")
-        except Exception as e:
-            logger.warning(f"Failed to write lead to local file: {e}")
+    # Local file saving removed. Relying entirely on Supabase.
 
     # Save to Supabase
     from database import db
@@ -328,14 +318,7 @@ async def confirm_order(
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
 
-    # Save to local file if not running on Vercel
-    if not os.getenv("VERCEL"):
-        orders_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "confirmed_orders.jsonl")
-        try:
-            with open(orders_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps(order, ensure_ascii=False) + "\n")
-        except Exception as e:
-            logger.warning(f"Failed to write order to local file: {e}")
+    # Local file saving removed. Relying entirely on Supabase.
 
     # Save to Supabase
     from database import db

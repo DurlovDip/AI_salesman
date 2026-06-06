@@ -450,11 +450,8 @@ class SupabaseDB:
             return None
 
     async def get_global_contexts(self) -> List[Dict[str, Any]]:
-        """Retrieve all global contexts (user_id is null) with local JSON fallback."""
-        import json
-        import os
+        """Retrieve all global contexts (user_id is null) from Supabase."""
         client = get_supabase_client()
-        local_file = os.path.join(os.path.dirname(__file__), "global_contexts.json")
 
         db_contexts = []
         if client:
@@ -465,16 +462,6 @@ class SupabaseDB:
                 db_contexts = await asyncio.to_thread(_query) or []
             except Exception as e:
                 logger.error(f"Error retrieving global contexts from Supabase: {e}")
-
-        # Merge or fall back to local file if empty or DB offline
-        if not client or not db_contexts:
-            if os.path.exists(local_file):
-                try:
-                    with open(local_file, "r", encoding="utf-8") as f:
-                        db_contexts = json.load(f)
-                except Exception as e:
-                    logger.error(f"Error reading local contexts: {e}")
-                    db_contexts = []
 
         # Ensure all contexts have context_type and is_active properties
         for c in db_contexts:
@@ -501,12 +488,9 @@ class SupabaseDB:
         context_type: str = "special",
         is_active: bool = False
     ) -> Optional[Dict[str, Any]]:
-        """Save or update a global context (user_id is null) with local JSON fallback."""
-        import json
-        import os
+        """Save or update a global context (user_id is null) in Supabase."""
         import uuid
         client = get_supabase_client()
-        local_file = os.path.join(os.path.dirname(__file__), "global_contexts.json")
 
         def _to_uuid(val: str) -> str:
             if not val:
@@ -523,49 +507,6 @@ class SupabaseDB:
         if context_type == "universal":
             is_active = True
 
-        # 1. Update/Write to local JSON file fallback if not running on Vercel
-        import os
-        if not os.getenv("VERCEL") or not client:
-            try:
-                contexts = []
-                if os.path.exists(local_file):
-                    with open(local_file, "r", encoding="utf-8") as f:
-                        contexts = json.load(f)
-
-                found = False
-                for idx, c in enumerate(contexts):
-                    c_id_cleaned = _to_uuid(c.get("id"))
-                    if (context_id and c_id_cleaned == target_id) or (not context_id and c.get("context_name") == name):
-                        target_id = c_id_cleaned or target_id
-                        contexts[idx] = {
-                            "id": target_id,
-                            "context_name": name,
-                            "description": description,
-                            "text": text,
-                            "context_type": context_type,
-                            "is_active": is_active,
-                            "user_id": None
-                        }
-                        found = True
-                        break
-
-                if not found:
-                    contexts.append({
-                        "id": target_id,
-                        "context_name": name,
-                        "description": description,
-                        "text": text,
-                        "context_type": context_type,
-                        "is_active": is_active,
-                        "user_id": None
-                    })
-
-                with open(local_file, "w", encoding="utf-8") as f:
-                    json.dump(contexts, f, indent=4, ensure_ascii=False)
-            except Exception as e:
-                logger.warning(f"Failed to write context to local file: {e}")
-
-        # 2. Update to Supabase if configured
         data = {
             "id": target_id,
             "context_name": name,
@@ -575,14 +516,14 @@ class SupabaseDB:
         if description is not None:
             data["description"] = description
 
+        if not client:
+            return data
+
         fields_to_try = [
             {"context_type": context_type, "is_active": is_active},
             {"context_type": context_type},
             {}
         ]
-
-        if not client:
-            return data
 
         for extra_fields in fields_to_try:
             payload = {**data, **extra_fields}

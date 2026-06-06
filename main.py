@@ -20,7 +20,7 @@ import os
 import time
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, HTMLResponse
 
@@ -202,91 +202,12 @@ async def _poll_facebook_loop() -> None:
 
 
 async def sync_local_data_to_supabase() -> None:
-    """Migrate local confirmed orders and leads to Supabase on startup."""
-    from database import db, get_supabase_client
-    import os
-    import json
-
+    """Migrate/Sync startup data to Supabase."""
+    from database import db
     if not db.is_configured():
         return
 
-    logger.info("🔄 Checking if local orders and leads need to be migrated to Supabase...")
-
-    # 1. Migrate Confirmed Orders
-    orders_file = os.path.join(os.path.dirname(__file__), "confirmed_orders.jsonl")
-    if os.path.exists(orders_file):
-        try:
-            db_orders = await db.get_all_orders()
-            existing_orders = {
-                (o.get("name"), o.get("phone"), o.get("order_details"))
-                for o in db_orders
-            }
-
-            with open(orders_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    if not line.strip():
-                        continue
-                    order = json.loads(line)
-                    name = order.get("name")
-                    phone = order.get("phone")
-                    address = order.get("address")
-                    order_details = order.get("order_details")
-
-                    if (name, phone, order_details) not in existing_orders:
-                        logger.info(f"🚚 Migrating local order to Supabase for {name} ({phone})")
-                        user_id = f"local_{phone.replace('+', '').strip()}"
-                        await db.save_order(
-                            platform="local",
-                            user_id=user_id,
-                            name=name,
-                            phone=phone,
-                            address=address,
-                            order_details=order_details
-                        )
-        except Exception as e:
-            logger.error(f"Error migrating local orders to Supabase: {e}")
-
-    # 2. Migrate Leads
-    leads_file = os.path.join(os.path.dirname(__file__), "leads", "leads.jsonl")
-    if os.path.exists(leads_file):
-        try:
-            client = get_supabase_client()
-            db_leads = []
-            if client:
-                def _query():
-                    res = client.table("leads").select("*").execute()
-                    return res.data
-                db_leads = await asyncio.to_thread(_query)
-
-            existing_leads = {
-                (l.get("name"), l.get("phone"), l.get("interest"))
-                for l in db_leads
-            }
-
-            with open(leads_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    if not line.strip():
-                        continue
-                    lead = json.loads(line)
-                    name = lead.get("name")
-                    phone = lead.get("phone")
-                    interest = lead.get("interest")
-                    platform = lead.get("platform", "local")
-                    user_id = lead.get("user_id") or f"local_{phone.replace('+', '').strip()}"
-
-                    if (name, phone, interest) not in existing_leads:
-                        logger.info(f"👥 Migrating local lead to Supabase for {name} ({phone})")
-                        await db.save_lead(
-                            platform=platform,
-                            user_id=user_id,
-                            name=name,
-                            phone=phone,
-                            interest=interest
-                        )
-        except Exception as e:
-            logger.error(f"Error migrating local leads to Supabase: {e}")
-
-    # 3. Fetch Fabingo Page conversations and sync user IDs/participants to Supabase
+    # Fetch Fabingo Page conversations and sync user IDs/participants to Supabase
     if settings.messenger_configured:
         import httpx
         try:
@@ -325,12 +246,6 @@ async def sync_local_data_to_supabase() -> None:
         except Exception as e:
             logger.error(f"Error syncing Facebook users to Supabase on startup: {e}")
 
-    # Compile guidelines.txt based on active contexts
-    try:
-        await compile_and_save_active_guidelines()
-    except Exception as e:
-        logger.error(f"Error compiling guidelines on startup: {e}")
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -355,12 +270,12 @@ async def lifespan(app: FastAPI):
     # Start cleanup task
     cleanup_task = asyncio.create_task(_cleanup_sessions_loop())
     # Start polling task (acts as local webhook fallback)
-    # Disable polling loop on Vercel to prevent duplicate replies in serverless environment
+    # Disable polling loop in production (when DEBUG is False) to rely entirely on webhooks
     polling_task = None
-    if not os.getenv("VERCEL"):
+    if settings.DEBUG:
         polling_task = asyncio.create_task(_poll_facebook_loop())
     else:
-        logger.info("ℹ️ Running on Vercel: disabling Facebook polling loop to prevent duplicate replies")
+        logger.info("ℹ️ Running in Production mode: disabling Facebook polling loop to rely entirely on webhooks")
     # Start local data migration task
     await sync_local_data_to_supabase()
 
@@ -423,13 +338,12 @@ async def root():
 @app.get("/health", tags=["Health"])
 async def health():
     """Detailed health check."""
-    # Check if running on Vercel
-    is_vercel = bool(os.getenv("VERCEL"))
+    is_debug = settings.DEBUG
 
     return {
         "status": "ok",
-        "environment": "vercel" if is_vercel else "local",
-        "polling_loop_enabled": not is_vercel,
+        "environment": "local" if is_debug else "production",
+        "polling_loop_enabled": is_debug,
         "webhook_endpoint": "/webhook/messenger",
         "messenger": settings.messenger_configured,
         "whatsapp": settings.whatsapp_configured,
@@ -446,32 +360,33 @@ async def health():
 
 
 @app.get("/test-webhook", tags=["Health"])
-async def test_webhook_config():
+async def test_webhook_config(request: Request):
     """
     Test endpoint to verify webhook configuration.
     Visit this after deployment to get webhook setup instructions.
     """
-    is_vercel = bool(os.getenv("VERCEL"))
+    base_url = str(request.base_url).rstrip("/")
+    is_debug = settings.DEBUG
 
     return {
         "status": "webhook_test_endpoint_ready",
-        "your_webhook_url": "https://ai-salesman-kappa.vercel.app/webhook/messenger",
+        "your_webhook_url": f"{base_url}/webhook/messenger",
         "verify_token": settings.META_VERIFY_TOKEN,
-        "environment": "vercel" if is_vercel else "local",
+        "environment": "local" if is_debug else "production",
         "messenger_configured": settings.messenger_configured,
         "page_id": settings.META_PAGE_ID if settings.messenger_configured else "NOT_CONFIGURED",
         "setup_steps": [
             "1. Go to Meta Developer Console → Your App → Messenger → Settings",
-            "2. Edit Callback URL and set to: https://ai-salesman-kappa.vercel.app/webhook/messenger",
+            f"2. Edit Callback URL and set to: {base_url}/webhook/messenger",
             f"3. Set Verify Token to: {settings.META_VERIFY_TOKEN}",
             "4. Click 'Verify and Save' — should see success checkmark",
             "5. Subscribe to these webhook fields: messages, messaging_postbacks, message_deliveries, message_reads",
             "6. Under 'Webhooks' section, click 'Add or Remove Pages' and subscribe your Fabingo page",
             "7. Send a test message to your Facebook Page to trigger the webhook",
-            "8. Check Vercel logs or this console to see if webhook is receiving messages"
+            "8. Check console or server logs to see if webhook is receiving messages"
         ],
         "troubleshooting": {
-            "if_webhook_verification_fails": "Check that VERCEL deployment has META_VERIFY_TOKEN environment variable set correctly",
+            "if_webhook_verification_fails": "Check that server environment has META_VERIFY_TOKEN environment variable set correctly",
             "if_messages_not_arriving": "Verify Page is subscribed to webhook in Meta Developer Console",
             "if_ai_not_responding": "Check /health endpoint to verify AI providers are configured (openai, gemini, or groq keys)",
         }
@@ -539,32 +454,37 @@ async def get_ai_status():
 
 @app.get("/api/ai/guidelines", tags=["AI Settings"])
 async def get_ai_guidelines():
-    """Read custom guidelines for the AI assistant."""
-    guidelines_file = os.path.join(os.path.dirname(__file__), "guidelines.txt")
-    if not os.path.exists(guidelines_file):
-        return {"guidelines": ""}
+    """Read custom guidelines compiled dynamically from database contexts."""
     try:
-        with open(guidelines_file, "r") as f:
-            return {"guidelines": f.read()}
+        compiled_text = await compile_and_save_active_guidelines()
+        return {"guidelines": compiled_text}
     except Exception as e:
-        return JSONResponse(status_code=500, content={"error": f"Failed to read guidelines: {e}"})
+        return JSONResponse(status_code=500, content={"error": f"Failed to compile guidelines: {e}"})
 
 
 @app.post("/api/ai/guidelines", tags=["AI Settings"])
 async def save_ai_guidelines(body: dict = Body(...)):
-    """Save custom guidelines for the AI assistant."""
+    """Save custom guidelines to the default Standard Sales Rules context in Supabase."""
     guidelines = body.get("guidelines", "")
-    guidelines_file = os.path.join(os.path.dirname(__file__), "guidelines.txt")
-    try:
-        with open(guidelines_file, "w") as f:
-            f.write(guidelines)
-        return {"status": "ok", "message": "Guidelines updated successfully"}
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": f"Failed to save guidelines: {e}"})
+    from database import db
+    if db.is_configured():
+        try:
+            await db.save_global_context(
+                name="Standard Sales Rules",
+                text=guidelines,
+                description="Default Fabingo AI sales rules and guidelines",
+                context_id="c_default",
+                context_type="universal",
+                is_active=True
+            )
+            return {"status": "ok", "message": "Guidelines updated in database successfully"}
+        except Exception as e:
+            return JSONResponse(status_code=500, content={"error": f"Failed to save guidelines to database: {e}"})
+    return JSONResponse(status_code=503, content={"error": "Database not configured"})
 
 
 async def compile_and_save_active_guidelines() -> str:
-    """Compile all active contexts (universal + active special) into guidelines.txt."""
+    """Compile all active contexts (universal + active special) from Supabase."""
     from database import db
     contexts = await db.get_global_contexts()
     compiled_parts = []
@@ -587,18 +507,7 @@ async def compile_and_save_active_guidelines() -> str:
                 compiled_parts.append(f"{header}\n\n{text_body}")
 
     compiled_text = "\n\n" + "\n\n# ======================================================\n\n".join(compiled_parts) + "\n"
-
-    guidelines_file = os.path.join(os.path.dirname(__file__), "guidelines.txt")
-    if not os.getenv("VERCEL"):
-        try:
-            with open(guidelines_file, "w", encoding="utf-8") as f:
-                f.write(compiled_text.strip())
-            logger.info(f"✅ Compiled guidelines.txt successfully with {len(compiled_parts)} active contexts")
-        except Exception as e:
-            logger.error(f"❌ Failed to write compiled guidelines to file: {e}")
-    else:
-        logger.info(f"ℹ️ Running on Vercel: skipped compiling guidelines.txt on disk (using db contexts directly)")
-
+    logger.info(f"✅ Compiled guidelines from database successfully with {len(compiled_parts)} active contexts")
     return compiled_text
 
 
@@ -609,15 +518,11 @@ async def get_contexts():
     contexts = await db.get_global_contexts()
 
     if not contexts:
-        guidelines_file = os.path.join(os.path.dirname(__file__), "guidelines.txt")
-        default_text = ""
-        if os.path.exists(guidelines_file):
-            try:
-                with open(guidelines_file, "r") as f:
-                    default_text = f.read()
-            except Exception:
-                pass
-
+        default_text = (
+            "Always reply in Bangla.\n"
+            "Be extremely polite, friendly, and helpful.\n"
+            "Keep responses concise and conversational."
+        )
         default_ctx = {
             "id": "c_default",
             "context_name": "Standard Sales Rules",
@@ -728,41 +633,25 @@ async def get_active_context():
 
 @app.get("/api/orders/confirmed", tags=["Orders"])
 async def get_confirmed_orders():
-    """Read the list of confirmed customer orders from Supabase (with local file fallback)."""
-    # 1. Try to fetch from Supabase if configured
+    """Read the list of confirmed customer orders from Supabase."""
     from database import db
     if db.is_configured():
         try:
             db_orders = await db.get_all_orders()
-            if db_orders:
-                orders = []
-                for order in db_orders:
-                    orders.append({
-                        "name": order.get("name"),
-                        "phone": order.get("phone"),
-                        "address": order.get("address"),
-                        "order_details": order.get("order_details"),
-                        "timestamp": order.get("created_at"),
-                    })
-                return {"orders": orders}
+            orders = []
+            for order in db_orders:
+                orders.append({
+                    "name": order.get("name"),
+                    "phone": order.get("phone"),
+                    "address": order.get("address"),
+                    "order_details": order.get("order_details"),
+                    "timestamp": order.get("created_at"),
+                })
+            return {"orders": orders}
         except Exception as e:
             logger.error(f"Error querying orders from Supabase: {e}")
-
-    # 2. Fallback to local file
-    orders_file = os.path.join(os.path.dirname(__file__), "confirmed_orders.jsonl")
-    if not os.path.exists(orders_file):
-        return {"orders": []}
-    try:
-        import json
-        orders = []
-        with open(orders_file, "r", encoding="utf-8") as f:
-            for line in f:
-                if line.strip():
-                    orders.append(json.loads(line))
-        orders.reverse()
-        return {"orders": orders}
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": f"Failed to read orders: {e}"})
+            return JSONResponse(status_code=500, content={"error": f"Failed to query orders from database: {e}"})
+    return {"orders": []}
 
 
 @app.get("/conversations", tags=["Debug"])
