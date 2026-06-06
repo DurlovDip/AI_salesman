@@ -423,14 +423,58 @@ async def root():
 @app.get("/health", tags=["Health"])
 async def health():
     """Detailed health check."""
+    # Check if running on Vercel
+    is_vercel = bool(os.getenv("VERCEL"))
+
     return {
         "status": "ok",
+        "environment": "vercel" if is_vercel else "local",
+        "polling_loop_enabled": not is_vercel,
+        "webhook_endpoint": "/webhook/messenger",
         "messenger": settings.messenger_configured,
         "whatsapp": settings.whatsapp_configured,
         "store": settings.STORE_NAME,
         "backend_url": settings.FASHION_ARC_API_URL,
-        "ai_url": settings.MULTI_AI_API_URL,
+        "ai_providers": {
+            "openai": bool(settings.OPENAI_API_KEY),
+            "gemini": bool(settings.GEMINI_API_KEY),
+            "groq": bool(settings.GROQ_API_KEY),
+        },
+        "supabase": settings.supabase_configured,
         "active_conversations": conversation_manager.active_count,
+    }
+
+
+@app.get("/test-webhook", tags=["Health"])
+async def test_webhook_config():
+    """
+    Test endpoint to verify webhook configuration.
+    Visit this after deployment to get webhook setup instructions.
+    """
+    is_vercel = bool(os.getenv("VERCEL"))
+
+    return {
+        "status": "webhook_test_endpoint_ready",
+        "your_webhook_url": "https://ai-salesman-kappa.vercel.app/webhook/messenger",
+        "verify_token": settings.META_VERIFY_TOKEN,
+        "environment": "vercel" if is_vercel else "local",
+        "messenger_configured": settings.messenger_configured,
+        "page_id": settings.META_PAGE_ID if settings.messenger_configured else "NOT_CONFIGURED",
+        "setup_steps": [
+            "1. Go to Meta Developer Console → Your App → Messenger → Settings",
+            "2. Edit Callback URL and set to: https://ai-salesman-kappa.vercel.app/webhook/messenger",
+            f"3. Set Verify Token to: {settings.META_VERIFY_TOKEN}",
+            "4. Click 'Verify and Save' — should see success checkmark",
+            "5. Subscribe to these webhook fields: messages, messaging_postbacks, message_deliveries, message_reads",
+            "6. Under 'Webhooks' section, click 'Add or Remove Pages' and subscribe your Fabingo page",
+            "7. Send a test message to your Facebook Page to trigger the webhook",
+            "8. Check Vercel logs or this console to see if webhook is receiving messages"
+        ],
+        "troubleshooting": {
+            "if_webhook_verification_fails": "Check that VERCEL deployment has META_VERIFY_TOKEN environment variable set correctly",
+            "if_messages_not_arriving": "Verify Page is subscribed to webhook in Meta Developer Console",
+            "if_ai_not_responding": "Check /health endpoint to verify AI providers are configured (openai, gemini, or groq keys)",
+        }
     }
 
 
