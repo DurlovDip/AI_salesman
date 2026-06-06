@@ -203,16 +203,21 @@ async def _respond_to_user(
     # Get or create conversation session
     session = await conversation_manager.get_or_create("whatsapp", phone, user_name)
 
-    # Track user in Supabase immediately
+    # Track user and increment message count in Supabase in background
     from database import db
     if db.is_configured():
-        await db.create_or_update_user(
-            platform="whatsapp",
-            user_id=phone,
-            name=user_name or "WhatsApp User"
-        )
-        # Increment message count
-        await db.increment_message_count("whatsapp", phone)
+        import asyncio
+        async def _track_user_background():
+            try:
+                await db.create_or_update_user(
+                    platform="whatsapp",
+                    user_id=phone,
+                    name=user_name or "WhatsApp User"
+                )
+                await db.increment_message_count("whatsapp", phone)
+            except Exception as e:
+                logger.error(f"Error updating WhatsApp user profile in background: {e}")
+        asyncio.create_task(_track_user_background())
 
 
     # Check for human handoff

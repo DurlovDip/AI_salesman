@@ -60,7 +60,7 @@ class ConversationSession:
             )
 
     async def add_message(self, role: str, content: str, message_id: Optional[str] = None) -> None:
-        """Add a message, trim history, and sync to Supabase."""
+        """Add a message, trim history, and sync to Supabase in the background."""
         # Prevent duplicate message insertion if the last message in history has the same message_id
         if message_id and self.messages and self.messages[-1].get("message_id") == message_id:
             logger.debug(f"Message {message_id} already at the end of session history. Skipping in-memory append.")
@@ -77,20 +77,25 @@ class ConversationSession:
         if len(self.messages) > max_msgs:
             self.messages = self.messages[-max_msgs:]
 
-        # Sync to Supabase
+        # Sync to Supabase in background
         from database import db
         if db.is_configured():
-            await db.save_message(
-                platform=self.platform,
-                user_id=self.user_id,
-                role=role,
-                content=content,
-                message_id=message_id
-            )
+            async def _save():
+                try:
+                    await db.save_message(
+                        platform=self.platform,
+                        user_id=self.user_id,
+                        role=role,
+                        content=content,
+                        message_id=message_id
+                    )
+                except Exception as e:
+                    logger.error(f"Error saving message in background: {e}")
+            asyncio.create_task(_save())
 
 
     async def add_tool_messages(self, tool_messages: List[Dict]) -> None:
-        """Add tool call + result messages from the AI agent and sync to Supabase."""
+        """Add tool call + result messages from the AI agent and sync to Supabase in the background."""
         self.messages.extend(tool_messages)
         self.last_active = time.time()
 
@@ -98,24 +103,29 @@ class ConversationSession:
         if len(self.messages) > max_msgs:
             self.messages = self.messages[-max_msgs:]
 
-        # Sync to Supabase
+        # Sync to Supabase in background
         from database import db
         if db.is_configured():
-            for msg in tool_messages:
-                role = msg.get("role")
-                content = msg.get("content")
-                name = msg.get("name")
-                tool_calls = msg.get("tool_calls")
-                tool_call_id = msg.get("tool_call_id")
-                await db.save_message(
-                    platform=self.platform,
-                    user_id=self.user_id,
-                    role=role,
-                    content=content,
-                    name=name,
-                    tool_calls=tool_calls,
-                    tool_call_id=tool_call_id
-                )
+            async def _save_tools():
+                try:
+                    for msg in tool_messages:
+                        role = msg.get("role")
+                        content = msg.get("content")
+                        name = msg.get("name")
+                        tool_calls = msg.get("tool_calls")
+                        tool_call_id = msg.get("tool_call_id")
+                        await db.save_message(
+                            platform=self.platform,
+                            user_id=self.user_id,
+                            role=role,
+                            content=content,
+                            name=name,
+                            tool_calls=tool_calls,
+                            tool_call_id=tool_call_id
+                        )
+                except Exception as e:
+                    logger.error(f"Error saving tool messages in background: {e}")
+            asyncio.create_task(_save_tools())
 
     def get_chat_messages(self) -> List[Dict]:
         """Return messages formatted for the AI chat API."""

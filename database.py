@@ -46,6 +46,17 @@ def get_supabase_client():
 class SupabaseDB:
     """Helper class to interact with Supabase tables asynchronously."""
 
+    def __init__(self) -> None:
+        self._user_cache = {}          # key -> (user_dict, timestamp)
+        self._user_facts_cache = {}    # key -> (facts_str, timestamp)
+        self._global_contexts_cache = None
+        self._global_contexts_cache_time = 0.0
+        self._message_id_cache = {}    # message_id -> timestamp
+
+    def clear_global_contexts_cache(self) -> None:
+        self._global_contexts_cache = None
+        self._global_contexts_cache_time = 0.0
+
     def is_configured(self) -> bool:
         return get_supabase_client() is not None
 
@@ -54,11 +65,17 @@ class SupabaseDB:
 
     async def get_user(self, platform: str, user_id: str) -> Optional[Dict[str, Any]]:
         """Fetch user profile by platform and user_id."""
+        user_key = self._get_user_key(platform, user_id)
+        now = time.time()
+        if user_key in self._user_cache:
+            cached_user, ts = self._user_cache[user_key]
+            if now - ts < 300:  # 5 minutes cache
+                return cached_user
+
         client = get_supabase_client()
         if not client:
             return None
 
-        user_key = self._get_user_key(platform, user_id)
         try:
             # Run blocking database call in a separate thread
             def _query():
@@ -70,7 +87,9 @@ class SupabaseDB:
                 user = data[0]
                 if "role" not in user or user["role"] is None:
                     user["role"] = user.get("metadata", {}).get("role", "Customer")
+                self._user_cache[user_key] = (user, now)
                 return user
+            self._user_cache[user_key] = (None, now)
             return None
         except Exception as e:
             logger.error(f"Error querying user {user_key} from Supabase: {e}")
@@ -91,6 +110,33 @@ class SupabaseDB:
         """Upsert user profile."""
         client = get_supabase_client()
         user_key = self._get_user_key(platform, user_id)
+        now = time.time()
+
+        # Check if the incoming values differ from cached values to avoid redundant DB calls
+        if user_key in self._user_cache:
+            cached_user, ts = self._user_cache[user_key]
+            is_different = False
+            if name is not None and cached_user.get("name") != name:
+                is_different = True
+            if phone is not None and cached_user.get("phone") != phone:
+                is_different = True
+            if address is not None and cached_user.get("address") != address:
+                is_different = True
+            if lead_type is not None and cached_user.get("lead_type") != lead_type:
+                is_different = True
+            if human_handoff is not None and cached_user.get("human_handoff") != human_handoff:
+                is_different = True
+            if role is not None and cached_user.get("role") != role:
+                is_different = True
+            if metadata is not None:
+                cached_meta = cached_user.get("metadata") or {}
+                for k, v in metadata.items():
+                    if cached_meta.get(k) != v:
+                        is_different = True
+                        break
+            
+            if not is_different:
+                return cached_user
 
         # Build updates payload
         data: Dict[str, Any] = {
@@ -135,7 +181,11 @@ class SupabaseDB:
                 return res.data
 
             res_data = await asyncio.to_thread(_upsert)
-            return res_data[0] if res_data else data
+            updated_user = res_data[0] if res_data else data
+            if "role" not in updated_user or updated_user["role"] is None:
+                updated_user["role"] = updated_user.get("metadata", {}).get("role", "Customer")
+            self._user_cache[user_key] = (updated_user, now)
+            return updated_user
         except Exception as e:
             # If it failed and role was set, it might be because the role column doesn't exist in the schema.
             # Retry without the role column only if the error indicates a missing column/schema cache issue.
@@ -148,7 +198,11 @@ class SupabaseDB:
                         res = client.table("users").upsert(data).execute()
                         return res.data
                     res_data = await asyncio.to_thread(_upsert_fallback)
-                    return res_data[0] if res_data else data
+                    updated_user = res_data[0] if res_data else data
+                    if "role" not in updated_user or updated_user["role"] is None:
+                        updated_user["role"] = updated_user.get("metadata", {}).get("role", "Customer")
+                    self._user_cache[user_key] = (updated_user, now)
+                    return updated_user
                 except Exception as e2:
                     logger.error(f"Error in fallback upsert user {user_key}: {e2}")
                     return data
@@ -158,6 +212,14 @@ class SupabaseDB:
 
     async def increment_message_count(self, platform: str, user_id: str) -> None:
         """Increment user's message count by 1."""
+        # Update cache message count immediately
+        user_key = self._get_user_key(platform, user_id)
+        now = time.time()
+        if user_key in self._user_cache:
+            cached_user, ts = self._user_cache[user_key]
+            cached_user["message_count"] = cached_user.get("message_count", 0) + 1
+            self._user_cache[user_key] = (cached_user, now)
+
         client = get_supabase_client()
         if not client:
             return
@@ -293,8 +355,14 @@ class SupabaseDB:
         if not message_id:
             return True
 
+        # Check in-memory cache first!
+        now = time.time()
+        if message_id in self._message_id_cache:
+            return False  # Duplicate!
+
         client = get_supabase_client()
         if not client:
+            self._message_id_cache[message_id] = now
             return True
 
         user_key = self._get_user_key(platform, user_id)
@@ -309,6 +377,7 @@ class SupabaseDB:
                 return res.data
             existing = await asyncio.to_thread(_check)
             if existing:
+                self._message_id_cache[message_id] = now
                 return False
 
             # Insert the actual message as a lock
@@ -322,6 +391,13 @@ class SupabaseDB:
             def _insert():
                 client.table("messages").insert(data).execute()
             await asyncio.to_thread(_insert)
+            
+            # Store in in-memory cache
+            self._message_id_cache[message_id] = now
+            
+            # Clean up old message IDs from cache (older than 10 minutes)
+            self._message_id_cache = {mid: ts for mid, ts in self._message_id_cache.items() if now - ts < 600}
+            
             return True
         except Exception as e:
             err_str = str(e)
@@ -392,6 +468,9 @@ class SupabaseDB:
         text: str,
     ) -> Optional[Dict[str, Any]]:
         """Upsert long-term user context (e.g. facts/preferences)."""
+        cache_key = f"{platform}:{user_id}:{context_name}"
+        self._user_facts_cache[cache_key] = (text, time.time())
+
         client = get_supabase_client()
         user_key = self._get_user_key(platform, user_id)
 
@@ -425,6 +504,13 @@ class SupabaseDB:
 
     async def get_context(self, platform: str, user_id: str, context_name: str) -> Optional[str]:
         """Get context text for user."""
+        cache_key = f"{platform}:{user_id}:{context_name}"
+        now = time.time()
+        if cache_key in self._user_facts_cache:
+            cached_val, ts = self._user_facts_cache[cache_key]
+            if now - ts < 300:  # 5 minutes TTL
+                return cached_val
+
         client = get_supabase_client()
         if not client:
             return None
@@ -443,7 +529,10 @@ class SupabaseDB:
 
             data = await asyncio.to_thread(_query)
             if data and len(data) > 0:
-                return data[0]["text"]
+                val = data[0]["text"]
+                self._user_facts_cache[cache_key] = (val, now)
+                return val
+            self._user_facts_cache[cache_key] = (None, now)
             return None
         except Exception as e:
             logger.error(f"Error getting context {context_name} for {user_key}: {e}")
@@ -451,6 +540,11 @@ class SupabaseDB:
 
     async def get_global_contexts(self) -> List[Dict[str, Any]]:
         """Retrieve all global contexts (user_id is null) from Supabase."""
+        now = time.time()
+        if self._global_contexts_cache is not None:
+            if now - self._global_contexts_cache_time < 300:  # 5 minutes TTL
+                return self._global_contexts_cache
+
         client = get_supabase_client()
 
         db_contexts = []
@@ -477,6 +571,8 @@ class SupabaseDB:
                 else:
                     c["is_active"] = False
 
+        self._global_contexts_cache = db_contexts
+        self._global_contexts_cache_time = now
         return db_contexts
 
     async def save_global_context(
@@ -489,6 +585,7 @@ class SupabaseDB:
         is_active: bool = False
     ) -> Optional[Dict[str, Any]]:
         """Save or update a global context (user_id is null) in Supabase."""
+        self.clear_global_contexts_cache()
         import uuid
         client = get_supabase_client()
 

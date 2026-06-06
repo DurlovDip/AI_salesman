@@ -464,42 +464,72 @@ async def get_ai_response(
     return text or "I found some information. How else can I help you?", messages
 
 
+provider_cooldowns: Dict[str, float] = {}
+
+def mark_provider_failed(provider: str) -> None:
+    import time
+    logger.warning(f"⚠️ Provider '{provider}' marked as failed. Putting on cooldown for 5 minutes.")
+    provider_cooldowns[provider] = time.time() + 300
+
+def is_provider_on_cooldown(provider: str) -> bool:
+    import time
+    cooldown_until = provider_cooldowns.get(provider, 0.0)
+    return time.time() < cooldown_until
+
+
 async def _call_ai_with_tools(messages: List[Dict]) -> Dict:
     """
-    Call the direct APIs (OpenAI → Gemini → Groq) as requested for a basic setup.
+    Call the AI providers with failover and cooldown support,
+    defaulting to the primary provider if configured.
     """
-    # Try direct OpenAI API first
-    if settings.OPENAI_API_KEY:
-        try:
-            logger.info("🤖 Calling OpenAI API directly...")
-            result = await _call_openai_direct(messages)
-            if "error" not in result:
-                return result
-            logger.warning(f"OpenAI direct error: {result.get('error')}")
-        except Exception as e:
-            logger.warning(f"OpenAI direct call failed: {e}")
+    primary = settings.PRIMARY_AI_PROVIDER.lower().strip() if hasattr(settings, "PRIMARY_AI_PROVIDER") else "gemini"
+    default_order = ["openai", "gemini", "groq", "multi-ai"]
+    if primary in default_order:
+        order = [primary] + [p for p in default_order if p != primary]
+    else:
+        order = default_order
 
-    # Fallback: direct Gemini API
-    if settings.GEMINI_API_KEY:
+    for provider in order:
+        # Check if configured
+        configured = False
+        if provider == "openai":
+            configured = bool(settings.OPENAI_API_KEY)
+        elif provider == "gemini":
+            configured = bool(settings.GEMINI_API_KEY)
+        elif provider == "groq":
+            configured = bool(settings.GROQ_API_KEY)
+        elif provider == "multi-ai":
+            configured = bool(settings.MULTI_AI_API_URL)
+
+        if not configured:
+            continue
+
+        if is_provider_on_cooldown(provider):
+            logger.info(f"⏭️ Skipping provider '{provider}' because it is on cooldown.")
+            continue
+
         try:
-            logger.info("🤖 Calling Gemini API directly...")
-            result = await _call_gemini_direct(messages)
+            logger.info(f"🤖 Calling {provider} API directly...")
+            if provider == "openai":
+                result = await _call_openai_direct(messages)
+            elif provider == "gemini":
+                result = await _call_gemini_direct(messages)
+            elif provider == "groq":
+                result = await _call_groq_direct(messages)
+            elif provider == "multi-ai":
+                result = await _call_multi_ai(messages)
+            else:
+                continue
+
             if "error" not in result:
                 return result
-            logger.warning(f"Gemini direct error: {result.get('error')}")
+
+            # If it returned an error, mark as failed
+            logger.warning(f"{provider} direct error: {result.get('error')}")
+            mark_provider_failed(provider)
         except Exception as e:
-            logger.error(f"Gemini direct call failed: {e}")
-            
-    # Fallback: direct Groq API
-    if settings.GROQ_API_KEY:
-        try:
-            logger.info("🤖 Calling Groq API directly...")
-            result = await _call_groq_direct(messages)
-            if "error" not in result:
-                return result
-            logger.warning(f"Groq direct error: {result.get('error')}")
-        except Exception as e:
-            logger.warning(f"Groq direct call failed: {e}")
+            logger.error(f"{provider} direct call failed: {e}")
+            mark_provider_failed(provider)
 
     return {"error": "No AI provider available"}
 

@@ -186,16 +186,28 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
     """
     Process user text through the AI agent and send the response.
     """
-    # Fetch profile information from Graph API immediately to register user
+    # Try to get user name from session metadata or database cache first
     full_name = "Facebook User"
-    try:
-        profile = await messenger_api.get_user_profile(sender_id)
-        if profile:
-            first_name = profile.get("first_name", "")
-            last_name = profile.get("last_name", "")
-            full_name = f"{first_name} {last_name}".strip()
-    except Exception as e:
-        logger.warning(f"Failed to fetch profile for {sender_id}: {e}")
+    session = conversation_manager.get("messenger", sender_id)
+    if session and session.metadata.get("user_name"):
+        full_name = session.metadata["user_name"]
+    else:
+        from database import db
+        if db.is_configured():
+            cached_user = await db.get_user("messenger", sender_id)
+            if cached_user and cached_user.get("name"):
+                full_name = cached_user["name"]
+
+    # Only hit Facebook API as fallback if name is unknown
+    if full_name == "Facebook User":
+        try:
+            profile = await messenger_api.get_user_profile(sender_id)
+            if profile:
+                first_name = profile.get("first_name", "")
+                last_name = profile.get("last_name", "")
+                full_name = f"{first_name} {last_name}".strip()
+        except Exception as e:
+            logger.warning(f"Failed to fetch profile for {sender_id}: {e}")
 
     # Deduplicate messages using message_id synchronously
     if message_id:
@@ -216,16 +228,21 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
     session = await conversation_manager.get_or_create("messenger", sender_id, full_name)
     session.metadata["user_name"] = full_name
 
-    # Track user in Supabase immediately
+    # Track user and increment message count in Supabase in background
     from database import db
     if db.is_configured():
-        await db.create_or_update_user(
-            platform="messenger",
-            user_id=sender_id,
-            name=full_name
-        )
-        # Increment message count
-        await db.increment_message_count("messenger", sender_id)
+        import asyncio
+        async def _track_user_background():
+            try:
+                await db.create_or_update_user(
+                    platform="messenger",
+                    user_id=sender_id,
+                    name=full_name
+                )
+                await db.increment_message_count("messenger", sender_id)
+            except Exception as e:
+                logger.error(f"Error updating user profile in background: {e}")
+        asyncio.create_task(_track_user_background())
 
     # Add user message to history
     await session.add_message("user", user_text, message_id=message_id)
