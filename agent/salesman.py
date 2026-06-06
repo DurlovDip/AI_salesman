@@ -399,6 +399,50 @@ async def get_ai_response(
     except Exception as e:
         logger.error(f"Error loading custom guidelines: {e}")
 
+    # Inject active mode instructions dynamically
+    try:
+        from conversation.manager import conversation_manager
+        session = await conversation_manager.get_or_create(platform, user_id)
+        current_mode = session.metadata.get("current_mode")
+        if current_mode:
+            logger.info(f"📚 Session active mode detected: {current_mode}")
+            from database import db
+            db_commands = await db.get_command_modes()
+            
+            if current_mode == "documentation":
+                # List commands relevant to Admin or Tester
+                doc_lines = []
+                for cmd in db_commands:
+                    cmd_trigger = cmd.get("command")
+                    cmd_user = ", ".join(cmd.get("command_user", []))
+                    comments = cmd.get("comments", "")
+                    doc_lines.append(f"- `@{cmd_trigger}` (Allowed roles: {cmd_user}): {comments}")
+                
+                commands_doc = "\n".join(doc_lines)
+                
+                documentation_instruction = (
+                    f"\n\n## ACTIVE MODE: DOCUMENTATION MODE\n"
+                    f"You are currently in documentation mode. The customer has requested to see the documentation of all commands they can use.\n"
+                    f"You MUST formulate a clean plain text message listing all available commands and their descriptions.\n"
+                    f"Here are the available commands from the database:\n"
+                    f"{commands_doc}\n\n"
+                    f"CRITICAL RULES:\n"
+                    f"1. You must append the termination tag `@doc_response` in your response message so the system can terminate the mode (e.g. \"Here is the list of commands: ... @doc_response\").\n"
+                    f"2. Write your response in clean plain text without markdown formatting symbols."
+                )
+                system_prompt += documentation_instruction
+
+            elif current_mode == "testing":
+                testing_instruction = (
+                    f"\n\n## ACTIVE MODE: TESTING MODE\n"
+                    f"You are currently in testing mode. The customer (Admin/Tester) may send a message containing `@end` to request terminating testing mode.\n"
+                    f"If the customer requested to end/terminate testing mode (e.g., they sent `@end`), you MUST acknowledge this and output the termination command `@test_terminate` (e.g., \"Ending testing mode now. @test_terminate\").\n"
+                    f"Write your response in clean plain text without markdown formatting symbols."
+                )
+                system_prompt += testing_instruction
+    except Exception as e:
+        logger.error(f"Error checking active mode for system prompt: {e}")
+
     # Build initial messages with system prompt
     full_messages = [{"role": "system", "content": system_prompt}] + messages
 
