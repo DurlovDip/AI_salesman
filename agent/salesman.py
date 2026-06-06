@@ -369,22 +369,35 @@ async def get_ai_response(
     if user_context_str:
         system_prompt += user_context_str
 
-    import os
-    guidelines_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "guidelines.txt")
-    logger.info(f"🔍 Checking guidelines file at: {guidelines_file}")
-    if os.path.exists(guidelines_file):
-        try:
-            with open(guidelines_file, "r") as f:
-                custom_guidelines = f.read().strip()
-                if custom_guidelines:
-                    system_prompt += f"\n\n## Custom Guidelines / Context (Adhere to this strictly):\n{custom_guidelines}"
-                    logger.info(f"✅ Loaded custom guidelines ({len(custom_guidelines)} chars)")
-                else:
-                    logger.warning("⚠️ guidelines.txt is empty")
-        except Exception as e:
-            logger.error(f"Error loading custom guidelines: {e}")
-    else:
-        logger.warning("❌ guidelines.txt does not exist!")
+    # Load dynamic guidelines directly from database contexts
+    try:
+        from database import db
+        contexts = await db.get_global_contexts()
+        compiled_parts = []
+        
+        # Sort contexts: universal first, then special so they append in a consistent, logical order
+        sorted_contexts = sorted(
+            contexts, 
+            key=lambda c: 0 if c.get("context_type") == "universal" else 1
+        )
+        
+        for c in sorted_contexts:
+            c_type = c.get("context_type", "special")
+            is_act = c.get("is_active", False)
+            
+            # Universal context is always active, special is active only if checked
+            if c_type == "universal" or is_act:
+                header = f"# CONTEXT: {c.get('context_name')} ({c_type.upper()})"
+                text_body = c.get("text", "").strip()
+                if text_body:
+                    compiled_parts.append(f"{header}\n\n{text_body}")
+                    
+        if compiled_parts:
+            custom_guidelines = "\n\n# ======================================================\n\n".join(compiled_parts)
+            system_prompt += f"\n\n## Custom Guidelines / Context (Adhere to this strictly):\n{custom_guidelines}"
+            logger.info(f"✅ Loaded active guidelines directly from database ({len(custom_guidelines)} chars)")
+    except Exception as e:
+        logger.error(f"Error loading custom guidelines: {e}")
 
     # Build initial messages with system prompt
     full_messages = [{"role": "system", "content": system_prompt}] + messages

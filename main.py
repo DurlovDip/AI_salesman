@@ -545,12 +545,15 @@ async def compile_and_save_active_guidelines() -> str:
     compiled_text = "\n\n" + "\n\n# ======================================================\n\n".join(compiled_parts) + "\n"
     
     guidelines_file = os.path.join(os.path.dirname(__file__), "guidelines.txt")
-    try:
-        with open(guidelines_file, "w", encoding="utf-8") as f:
-            f.write(compiled_text.strip())
-        logger.info(f"✅ Compiled guidelines.txt successfully with {len(compiled_parts)} active contexts")
-    except Exception as e:
-        logger.error(f"❌ Failed to write compiled guidelines to file: {e}")
+    if not os.getenv("VERCEL"):
+        try:
+            with open(guidelines_file, "w", encoding="utf-8") as f:
+                f.write(compiled_text.strip())
+            logger.info(f"✅ Compiled guidelines.txt successfully with {len(compiled_parts)} active contexts")
+        except Exception as e:
+            logger.error(f"❌ Failed to write compiled guidelines to file: {e}")
+    else:
+        logger.info(f"ℹ️ Running on Vercel: skipped compiling guidelines.txt on disk (using db contexts directly)")
         
     return compiled_text
 

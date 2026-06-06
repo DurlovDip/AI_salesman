@@ -523,19 +523,34 @@ class SupabaseDB:
         if context_type == "universal":
             is_active = True
         
-        # 1. Update/Write to local JSON file fallback
-        try:
-            contexts = []
-            if os.path.exists(local_file):
-                with open(local_file, "r", encoding="utf-8") as f:
-                    contexts = json.load(f)
-            
-            found = False
-            for idx, c in enumerate(contexts):
-                c_id_cleaned = _to_uuid(c.get("id"))
-                if (context_id and c_id_cleaned == target_id) or (not context_id and c.get("context_name") == name):
-                    target_id = c_id_cleaned or target_id
-                    contexts[idx] = {
+        # 1. Update/Write to local JSON file fallback if not running on Vercel
+        import os
+        if not os.getenv("VERCEL") or not client:
+            try:
+                contexts = []
+                if os.path.exists(local_file):
+                    with open(local_file, "r", encoding="utf-8") as f:
+                        contexts = json.load(f)
+                
+                found = False
+                for idx, c in enumerate(contexts):
+                    c_id_cleaned = _to_uuid(c.get("id"))
+                    if (context_id and c_id_cleaned == target_id) or (not context_id and c.get("context_name") == name):
+                        target_id = c_id_cleaned or target_id
+                        contexts[idx] = {
+                            "id": target_id,
+                            "context_name": name,
+                            "description": description,
+                            "text": text,
+                            "context_type": context_type,
+                            "is_active": is_active,
+                            "user_id": None
+                        }
+                        found = True
+                        break
+                
+                if not found:
+                    contexts.append({
                         "id": target_id,
                         "context_name": name,
                         "description": description,
@@ -543,25 +558,12 @@ class SupabaseDB:
                         "context_type": context_type,
                         "is_active": is_active,
                         "user_id": None
-                    }
-                    found = True
-                    break
-            
-            if not found:
-                contexts.append({
-                    "id": target_id,
-                    "context_name": name,
-                    "description": description,
-                    "text": text,
-                    "context_type": context_type,
-                    "is_active": is_active,
-                    "user_id": None
-                })
-                
-            with open(local_file, "w", encoding="utf-8") as f:
-                json.dump(contexts, f, indent=4, ensure_ascii=False)
-        except Exception as e:
-            logger.error(f"Failed to write context to local file: {e}")
+                    })
+                    
+                with open(local_file, "w", encoding="utf-8") as f:
+                    json.dump(contexts, f, indent=4, ensure_ascii=False)
+            except Exception as e:
+                logger.warning(f"Failed to write context to local file: {e}")
 
         # 2. Update to Supabase if configured
         data = {
