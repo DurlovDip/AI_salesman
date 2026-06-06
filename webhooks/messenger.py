@@ -212,7 +212,6 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
             if not is_new:
                 logger.info(f"⏭️ Skipping duplicate/already processed Messenger message {message_id}")
                 return
-
     # Get or create conversation session
     session = await conversation_manager.get_or_create("messenger", sender_id, full_name)
     session.metadata["user_name"] = full_name
@@ -277,6 +276,13 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
 
         # Add assistant response to history
         await session.add_message("assistant", response_text)
+
+        # Persist last responded message ID to Supabase for Vercel deduplication
+        if message_id:
+            from database import db
+            if db.is_configured():
+                await db.set_last_responded_msg_id("messenger", sender_id, message_id)
+            session.metadata["last_responded_msg_id"] = message_id
 
         # Check for human handoff request in response
         if "connecting you with a human" in response_text.lower():

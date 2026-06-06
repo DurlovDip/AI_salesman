@@ -173,7 +173,7 @@ class SupabaseDB:
                 user_id,
                 lead_type=existing.get("lead_type") if existing else "cold",
             )
-            
+
             # Simple updates increment
             def _update():
                 client.table("users").update({
@@ -220,7 +220,7 @@ class SupabaseDB:
         """Save a conversation message, avoiding duplicates if message_id is provided."""
         client = get_supabase_client()
         user_key = self._get_user_key(platform, user_id)
-        
+
         # Ensure user exists first
         await self.create_or_update_user(platform, user_id)
 
@@ -298,7 +298,7 @@ class SupabaseDB:
             return True
 
         user_key = self._get_user_key(platform, user_id)
-        
+
         # Ensure user exists first
         await self.create_or_update_user(platform, user_id)
 
@@ -334,7 +334,7 @@ class SupabaseDB:
                     "    ALTER TABLE messages ADD COLUMN message_id TEXT UNIQUE;"
                 )
                 return True # Proceed to process the message even if we couldn't deduplicate
-            
+
             logger.warning(f"Conflict or error registering message_id {message_id}: {e}")
             return False
 
@@ -412,7 +412,7 @@ class SupabaseDB:
             def _upsert():
                 # On conflict of (user_id, context_name), update text and updated_at
                 res = client.table("contexts").upsert(
-                    data, 
+                    data,
                     on_conflict="user_id,context_name"
                 ).execute()
                 return res.data
@@ -455,7 +455,7 @@ class SupabaseDB:
         import os
         client = get_supabase_client()
         local_file = os.path.join(os.path.dirname(__file__), "global_contexts.json")
-        
+
         db_contexts = []
         if client:
             try:
@@ -465,7 +465,7 @@ class SupabaseDB:
                 db_contexts = await asyncio.to_thread(_query) or []
             except Exception as e:
                 logger.error(f"Error retrieving global contexts from Supabase: {e}")
-        
+
         # Merge or fall back to local file if empty or DB offline
         if not client or not db_contexts:
             if os.path.exists(local_file):
@@ -475,7 +475,7 @@ class SupabaseDB:
                 except Exception as e:
                     logger.error(f"Error reading local contexts: {e}")
                     db_contexts = []
-            
+
         # Ensure all contexts have context_type and is_active properties
         for c in db_contexts:
             if c.get("context_name") == "Standard Sales Rules" or c.get("id") in ("c_default", "bac3b77b-8e91-5ff5-ac79-01b59613fa60", "4197e59c-6ba1-512c-96be-8ffc4155fb2f"):
@@ -489,7 +489,7 @@ class SupabaseDB:
                     c["is_active"] = True
                 else:
                     c["is_active"] = False
-                    
+
         return db_contexts
 
     async def save_global_context(
@@ -507,7 +507,7 @@ class SupabaseDB:
         import uuid
         client = get_supabase_client()
         local_file = os.path.join(os.path.dirname(__file__), "global_contexts.json")
-        
+
         def _to_uuid(val: str) -> str:
             if not val:
                 return str(uuid.uuid4())
@@ -518,11 +518,11 @@ class SupabaseDB:
                 return str(uuid.uuid5(uuid.NAMESPACE_DNS, val))
 
         target_id = _to_uuid(context_id) if context_id else _to_uuid(name)
-        
+
         # If type is universal, it must always be active
         if context_type == "universal":
             is_active = True
-        
+
         # 1. Update/Write to local JSON file fallback if not running on Vercel
         import os
         if not os.getenv("VERCEL") or not client:
@@ -531,7 +531,7 @@ class SupabaseDB:
                 if os.path.exists(local_file):
                     with open(local_file, "r", encoding="utf-8") as f:
                         contexts = json.load(f)
-                
+
                 found = False
                 for idx, c in enumerate(contexts):
                     c_id_cleaned = _to_uuid(c.get("id"))
@@ -548,7 +548,7 @@ class SupabaseDB:
                         }
                         found = True
                         break
-                
+
                 if not found:
                     contexts.append({
                         "id": target_id,
@@ -559,7 +559,7 @@ class SupabaseDB:
                         "is_active": is_active,
                         "user_id": None
                     })
-                    
+
                 with open(local_file, "w", encoding="utf-8") as f:
                     json.dump(contexts, f, indent=4, ensure_ascii=False)
             except Exception as e:
@@ -574,7 +574,7 @@ class SupabaseDB:
         }
         if description is not None:
             data["description"] = description
-            
+
         fields_to_try = [
             {"context_type": context_type, "is_active": is_active},
             {"context_type": context_type},
@@ -595,7 +595,7 @@ class SupabaseDB:
             except Exception as e:
                 logger.warning(f"Error saving global context with fields {extra_fields}: {e}. Retrying with fewer fields...")
                 continue
-                
+
         return data
 
     async def save_lead(
@@ -723,7 +723,7 @@ class SupabaseDB:
 
             # Query where role column is 'Admin'
             data_col = await asyncio.to_thread(_query_column) or []
-            
+
             # Since some admins might be stored in metadata fallback (as metadata: {"role": "Admin"}),
             # let's fetch all users to inspect metadata.
             def _query_all():
@@ -731,7 +731,7 @@ class SupabaseDB:
                 return res.data
 
             all_users = await asyncio.to_thread(_query_all) or []
-            
+
             admins = {u["id"]: u for u in data_col}
             for u in all_users:
                 user_role = u.get("role") or u.get("metadata", {}).get("role")
@@ -743,6 +743,29 @@ class SupabaseDB:
             return []
 
 
+    async def get_last_responded_msg_id(self, platform: str, user_id: str) -> Optional[str]:
+        """Get the last responded message ID from Supabase (used for deduplication on Vercel)."""
+        user_data = await self.get_user(platform, user_id)
+        if user_data:
+            return (user_data.get("metadata") or {}).get("last_responded_msg_id")
+        return None
+
+    async def set_last_responded_msg_id(self, platform: str, user_id: str, msg_id: str) -> None:
+        """Persist last responded message ID to Supabase so it survives serverless restarts."""
+        client = get_supabase_client()
+        if not client:
+            return
+        user_key = self._get_user_key(platform, user_id)
+        try:
+            existing = await self.get_user(platform, user_id)
+            existing_meta = (existing.get("metadata") or {}) if existing else {}
+            existing_meta["last_responded_msg_id"] = msg_id
+            def _update():
+                client.table("users").update({"metadata": existing_meta}).eq("id", user_key).execute()
+            await asyncio.to_thread(_update)
+        except Exception as e:
+            logger.error(f"Error setting last_responded_msg_id for {user_key}: {e}")
+
+
 # Global singleton database instance
 db = SupabaseDB()
-
