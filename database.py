@@ -52,10 +52,14 @@ class SupabaseDB:
         self._global_contexts_cache = None
         self._global_contexts_cache_time = 0.0
         self._message_id_cache = {}    # message_id -> timestamp
+        self._command_modes_cache = None
+        self._command_modes_cache_time = 0.0
 
     def clear_global_contexts_cache(self) -> None:
         self._global_contexts_cache = None
         self._global_contexts_cache_time = 0.0
+        self._command_modes_cache = None
+        self._command_modes_cache_time = 0.0
 
     def is_configured(self) -> bool:
         return get_supabase_client() is not None
@@ -803,6 +807,29 @@ class SupabaseDB:
             await asyncio.to_thread(_update)
         except Exception as e:
             logger.error(f"Error setting last_responded_msg_id for {user_key}: {e}")
+
+    async def get_command_modes(self) -> List[Dict[str, Any]]:
+        """Retrieve all command configurations from command_modes table (cached)."""
+        now = time.time()
+        if self._command_modes_cache is not None:
+            if now - self._command_modes_cache_time < 300:  # 5 minutes cache
+                return self._command_modes_cache
+
+        client = get_supabase_client()
+        if not client:
+            return []
+
+        try:
+            def _query():
+                res = client.table("command_modes").select("*").execute()
+                return res.data
+            data = await asyncio.to_thread(_query)
+            self._command_modes_cache = data or []
+            self._command_modes_cache_time = now
+            return self._command_modes_cache
+        except Exception as e:
+            logger.error(f"Error querying command_modes from Supabase: {e}")
+            return []
 
 
 # Global singleton database instance

@@ -291,23 +291,34 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
             user_id=sender_id,
         )
 
-        # Add assistant response to history
-        await session.add_message("assistant", response_text)
+        # Process AI-initiated commands and clean the output
+        from tester_commands import handle_ai_response_commands
+        response_text = await handle_ai_response_commands(
+            platform="messenger",
+            user_id=sender_id,
+            text=response_text
+        )
 
-        # Persist last responded message ID to Supabase for Vercel deduplication
-        if message_id:
-            from database import db
-            if db.is_configured():
-                await db.set_last_responded_msg_id("messenger", sender_id, message_id)
-            session.metadata["last_responded_msg_id"] = message_id
+        if response_text:
+            # Add assistant response to history
+            await session.add_message("assistant", response_text)
 
-        # Check for human handoff request in response
-        if "connecting you with a human" in response_text.lower():
-            await session.set_human_handoff(True)
+            # Persist last responded message ID to Supabase for Vercel deduplication
+            if message_id:
+                from database import db
+                if db.is_configured():
+                    await db.set_last_responded_msg_id("messenger", sender_id, message_id)
+                session.metadata["last_responded_msg_id"] = message_id
 
-        # Send the response (chunked if long)
-        await messenger_api.send_typing_off(sender_id)
-        await messenger_api.send_text_chunked(sender_id, response_text)
+            # Check for human handoff request in response
+            if "connecting you with a human" in response_text.lower():
+                await session.set_human_handoff(True)
+
+            # Send the response (chunked if long)
+            await messenger_api.send_typing_off(sender_id)
+            await messenger_api.send_text_chunked(sender_id, response_text)
+        else:
+            await messenger_api.send_typing_off(sender_id)
 
     except Exception as e:
         logger.error(f"Error processing message from {sender_id}: {e}")

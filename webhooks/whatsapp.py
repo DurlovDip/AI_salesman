@@ -273,15 +273,24 @@ async def _respond_to_user(
             user_id=phone,
         )
 
-        # Add assistant response to history
-        await session.add_message("assistant", response_text)
+        # Process AI-initiated commands and clean the output
+        from tester_commands import handle_ai_response_commands
+        response_text = await handle_ai_response_commands(
+            platform="whatsapp",
+            user_id=phone,
+            text=response_text
+        )
 
-        # Check for human handoff
-        if "connecting you with a human" in response_text.lower():
-            await session.set_human_handoff(True)
+        if response_text:
+            # Add assistant response to history
+            await session.add_message("assistant", response_text)
 
-        # Send the response (chunked if long)
-        await whatsapp_api.send_text_chunked(phone, response_text)
+            # Check for human handoff
+            if "connecting you with a human" in response_text.lower():
+                await session.set_human_handoff(True)
+
+            # Send the response (chunked if long)
+            await whatsapp_api.send_text_chunked(phone, response_text)
 
     except Exception as e:
         logger.error(f"Error processing WhatsApp message from {phone}: {e}")

@@ -1,15 +1,19 @@
 """
-Tester Command Handler
-======================
-Intercepts messages from users with the "Tester" role that start with or contain "@testing" (allowing typos).
-Provides a conversational state machine flow to gather title and context, defaulting type to universal.
+Dynamic Command Processor
+=========================
+Loads allowed command modes from the database and processes them dynamically.
+Supports Human-initiated commands (inputs) and AI-initiated commands (outputs).
 """
 
 from __future__ import annotations
 
 import logging
 import re
-from typing import Optional, Tuple, Dict, Any
+import time
+from typing import Optional, Tuple, Dict, Any, List
+
+from database import db
+from conversation.manager import conversation_manager
 
 logger = logging.getLogger(__name__)
 
@@ -34,61 +38,6 @@ def levenshtein_distance(s1: str, s2: str) -> int:
     return previous_row[-1]
 
 
-def parse_message_tags(text: str) -> Dict[str, Any]:
-    """
-    Fuzzy parse testing tags from the message.
-    Looks for tokens starting with @ and maps them to standard tags.
-    """
-    targets = {
-        "testing": ("@testing", 2),
-        "title": ("@title", 2),
-        "type": ("@type", 1),
-        "context": ("@context", 2),
-    }
-
-    matches = []
-    # Find all words starting with @
-    for m in re.finditer(r'@\w+', text):
-        word = m.group(0).lower()
-        for key, (target, max_dist) in targets.items():
-            if levenshtein_distance(word, target) <= max_dist:
-                matches.append({
-                    "key": key,
-                    "start": m.start(),
-                    "end": m.end(),
-                    "word": m.group(0)
-                })
-                break  # Avoid matching multiple targets
-
-    # Sort matches by start index
-    matches.sort(key=lambda x: x["start"])
-
-    parsed = {
-        "testing_present": False,
-        "title": None,
-        "type": None,
-        "context": None
-    }
-
-    for i, match in enumerate(matches):
-        key = match["key"]
-        if key == "testing":
-            parsed["testing_present"] = True
-
-        # Extract content after the tag up to the next tag or end of string
-        start_content = match["end"]
-        end_content = matches[i + 1]["start"] if i + 1 < len(matches) else len(text)
-        content = text[start_content:end_content].strip()
-
-        # Clean up leading separator characters like -, :, =
-        content = re.sub(r'^[:\-\s=]+', '', content).strip()
-
-        if key != "testing" and content:
-            parsed[key] = content
-
-    return parsed
-
-
 def clean_plain_input(text: str, tag_to_clean: str) -> str:
     """
     Clean any leading tags or separators if the user prefix-typed them
@@ -106,6 +55,72 @@ def clean_plain_input(text: str, tag_to_clean: str) -> str:
     return cleaned
 
 
+async def find_matching_commands(text: str, responder: str = "Human") -> List[Tuple[Dict[str, Any], int, int, str]]:
+    """
+    Find all words starting with @ in text and match them fuzzy/exactly to DB commands.
+    Returns a list of tuples: (command_record, start_pos, end_pos, command_word)
+    sorted by start_pos.
+    """
+    if not text:
+        return []
+        
+    db_commands = await db.get_command_modes()
+    if not db_commands:
+        return []
+        
+    # Filter by responder (Human or AI)
+    db_commands = [c for c in db_commands if c.get("responder", "").lower() == responder.lower()]
+    
+    matches = []
+    # Find all words starting with @ preceded by space or start of line
+    for m in re.finditer(r'(?:^|\s)(@\w+)', text):
+        word = m.group(1)
+        word_clean = word[1:].lower()  # strip @
+        
+        best_match = None
+        best_dist = 999
+        
+        for cmd in db_commands:
+            cmd_trigger = cmd.get("command", "").lower()
+            # If word is very short, exact match or distance 1
+            max_dist = 2 if len(cmd_trigger) > 4 else 1
+            if word_clean == cmd_trigger:
+                best_match = cmd
+                best_dist = 0
+                break
+            
+            dist = levenshtein_distance(word_clean, cmd_trigger)
+            if dist <= max_dist and dist < best_dist:
+                best_match = cmd
+                best_dist = dist
+                
+        if best_match:
+            start = m.start(1)
+            end = m.end(1)
+            matches.append((best_match, start, end, word))
+            
+    # Sort by start position
+    matches.sort(key=lambda x: x[1])
+    return matches
+
+
+def extract_command_arguments(text: str, matches: List[Tuple[Dict[str, Any], int, int, str]]) -> Dict[str, str]:
+    """
+    For each matched command, extract the text after it up to the next command or end of string.
+    """
+    args = {}
+    for i, (cmd, start, end, word) in enumerate(matches):
+        cmd_name = cmd["command"]
+        content_start = end
+        content_end = matches[i + 1][1] if i + 1 < len(matches) else len(text)
+        content = text[content_start:content_end].strip()
+        
+        # Clean up leading separator characters like -, :, =
+        content = re.sub(r'^[:\-\s=]+', '', content).strip()
+        args[cmd_name] = content
+    return args
+
+
 async def handle_tester_command(
     platform: str,
     user_id: str,
@@ -113,147 +128,179 @@ async def handle_tester_command(
     user_name: str = "Tester",
 ) -> Tuple[bool, Optional[str]]:
     """
-    Check if the message is part of a conversational @testing command flow from a Tester.
+    Intercepts messages containing Human commands from authorized users
+    and manages the step-by-step state machine flows.
     """
-    from database import db
-    from conversation.manager import conversation_manager
-
-    # 1. Check if user has the Tester role
+    # 1. Fetch user data to check role
     user_data = await db.get_user(platform, user_id)
     user_role = "Customer"
     if user_data:
         user_role = user_data.get("role") or user_data.get("metadata", {}).get("role", "Customer")
 
-    if user_role != "Tester":
-        return (False, None)
+    # 2. Get active command modes from database
+    db_commands = await db.get_command_modes()
+    if not db_commands:
+        return False, None
 
-    # Get the conversation session
-    session = await conversation_manager.get_or_create(platform, user_id, user_name)
-
-    # 2. Parse the current message for any tags
-    parsed = parse_message_tags(user_text)
-
-    # A trigger is a new fuzzy @testing tag
-    is_new_trigger = parsed["testing_present"]
-
-    # Get state from metadata
-    tester_state = session.metadata.get("tester_state")
-    tester_draft = session.metadata.get("tester_draft") or {}
-
-    if is_new_trigger:
-        # Reset draft and start a new context flow
-        tester_state = None
-        tester_draft = {}
-
-    # If we aren't in the middle of a flow and there's no new trigger, pass to normal AI
-    if not is_new_trigger and not tester_state:
-        return (False, None)
-
-    # Extract any explicit tags sent in the message
-    if parsed["title"]:
-        tester_draft["title"] = parsed["title"]
-    if parsed["context"]:
-        tester_draft["context"] = parsed["context"]
-    if parsed["type"]:
-        tester_draft["type"] = parsed["type"]
-
-    # If in a conversational step, fill in the corresponding draft field
-    if not is_new_trigger:
-        if tester_state == "awaiting_title":
-            title = clean_plain_input(user_text, "@title")
-            if title:
-                tester_draft["title"] = title
-                tester_state = None
-        elif tester_state == "awaiting_context":
-            context = clean_plain_input(user_text, "@context")
-            if context:
-                tester_draft["context"] = context
-                tester_state = None
-
-    # Check for missing details
-    missing_title = not tester_draft.get("title")
-    missing_context = not tester_draft.get("context")
-
-    if missing_title:
-        session.metadata["tester_state"] = "awaiting_title"
-        session.metadata["tester_draft"] = tester_draft
-        
-        # Persist session metadata updates in database
-        if db.is_configured():
-            await db.create_or_update_user(
-                platform=platform,
-                user_id=user_id,
-                metadata=session.metadata
-            )
-        return (True, "Please enter the title for the new context:")
-
-    elif missing_context:
-        session.metadata["tester_state"] = "awaiting_context"
-        session.metadata["tester_draft"] = tester_draft
-        
-        # Persist session metadata updates in database
-        if db.is_configured():
-            await db.create_or_update_user(
-                platform=platform,
-                user_id=user_id,
-                metadata=session.metadata
-            )
-        return (True, "Please enter the context rules/text:")
-
-    # We have both title and context. Clear states and save!
-    title = tester_draft["title"]
-    context_text = tester_draft["context"]
-    context_type = tester_draft.get("type", "universal")
-
-    # Normalize type (defaults to universal)
-    if context_type not in ("universal", "special"):
-        context_type = "universal"
-
-    # Clear tester state from metadata
-    session.metadata.pop("tester_state", None)
-    session.metadata.pop("tester_draft", None)
+    # 3. Find any human commands in user message
+    matches = await find_matching_commands(user_text, responder="Human")
     
-    if db.is_configured():
-        await db.create_or_update_user(
-            platform=platform,
-            user_id=user_id,
-            metadata=session.metadata
-        )
+    # Check if we are currently in an active mode for this user
+    session = await conversation_manager.get_or_create(platform, user_id, user_name)
+    current_mode = session.metadata.get("current_mode")
+    
+    # If no commands matched and we are not in an active mode, pass to AI
+    if not matches and not current_mode:
+        return False, None
 
-    # Universal contexts are always active
-    is_active = True if context_type == "universal" else False
+    # Verify authorization for matched commands
+    if matches:
+        for cmd, _, _, _ in matches:
+            allowed_users = [u.lower() for u in cmd.get("command_user", [])]
+            if user_role.lower() not in allowed_users:
+                logger.warning(f"User {user_id} with role {user_role} is unauthorized to run command @{cmd['command']}")
+                return True, f"⚠️ You are not authorized to use the @{cmd['command']} command."
 
-    logger.info(
-        f"🧪 Tester {user_name} ({platform}:{user_id}) creating context: "
-        f"title='{title}', type={context_type}, is_active={is_active}"
-    )
+    # Parse arguments
+    args = extract_command_arguments(user_text, matches)
+    
+    # Let's check if there's an initiator command
+    initiator_match = next((m for m in matches if m[0]["command_type"] == "initiator"), None)
+    
+    if initiator_match:
+        # Start the mode!
+        cmd = initiator_match[0]
+        mode_name = cmd["mode"]
+        current_mode = mode_name
+        session.metadata["current_mode"] = mode_name
+        session.metadata["mode_state"] = {"draft": {}, "awaiting": None}
+        
+    # Process mediator commands
+    if current_mode:
+        # Update drafts with any mediator command values in this message
+        for cmd, _, _, _ in matches:
+            cmd_name = cmd["command"]
+            if cmd["command_type"] == "mediator" and cmd["mode"] == current_mode:
+                # Special case: @end command is sent to AI so AI can output @test_terminate
+                if cmd_name == "end":
+                    # Clear current_mode locally so AI receives the message, but do not terminate session yet.
+                    return False, None
+                
+                session.metadata["mode_state"]["draft"][cmd_name] = args.get(cmd_name, "")
+                session.metadata["mode_state"]["awaiting"] = None
+                
+        # If no commands matched, but we are in a mode and awaiting input, assign text to draft
+        if not matches and session.metadata["mode_state"].get("awaiting"):
+            awaiting = session.metadata["mode_state"]["awaiting"]
+            clean_text = clean_plain_input(user_text, f"@{awaiting}")
+            session.metadata["mode_state"]["draft"][awaiting] = clean_text
+            session.metadata["mode_state"]["awaiting"] = None
 
-    try:
-        await db.save_global_context(
-            name=title,
-            text=context_text,
-            description=f"Created by tester {user_name} ({platform}:{user_id})",
-            context_type=context_type,
-            is_active=is_active,
-        )
+        # Manage the step-by-step state machine flows based on mode
+        if current_mode == "testing":
+            draft = session.metadata["mode_state"]["draft"]
+            
+            # Check for missing parameters
+            if not draft.get("title"):
+                session.metadata["mode_state"]["awaiting"] = "title"
+                if db.is_configured():
+                    await db.create_or_update_user(platform=platform, user_id=user_id, metadata=session.metadata)
+                return True, "Please enter the title for the new context:"
+                
+            if not draft.get("context"):
+                session.metadata["mode_state"]["awaiting"] = "context"
+                if db.is_configured():
+                    await db.create_or_update_user(platform=platform, user_id=user_id, metadata=session.metadata)
+                return True, "Please enter the context rules/text:"
 
-        # Re-compile guidelines.txt with the new context
-        from main import compile_and_save_active_guidelines
-        await compile_and_save_active_guidelines()
+            # We have both title and context. Save it!
+            title = draft["title"]
+            context_text = draft["context"]
+            context_type = draft.get("type", "universal")
+            if context_type not in ("universal", "special"):
+                context_type = "universal"
+                
+            # Clear state
+            session.metadata.pop("current_mode", None)
+            session.metadata.pop("mode_state", None)
+            
+            if db.is_configured():
+                await db.create_or_update_user(platform=platform, user_id=user_id, metadata=session.metadata)
 
-        logger.info(f"✅ Context '{title}' ({context_type}) created successfully by tester {user_name}")
+            try:
+                # Save to database
+                await db.save_global_context(
+                    name=title,
+                    text=context_text,
+                    description=f"Created by tester {user_name} ({platform}:{user_id})",
+                    context_type=context_type,
+                    is_active=(context_type == "universal"),
+                )
 
-        # Exact confirmation format:
-        # "@confirmation
-        # Context is added & thanks for making me better"
-        confirmation = "@confirmation\nContext is added & thanks for making me better"
-        return (True, confirmation)
+                # Re-compile guidelines
+                from main import compile_and_save_active_guidelines
+                await compile_and_save_active_guidelines()
 
-    except Exception as e:
-        logger.error(f"❌ Failed to save context from tester command: {e}")
-        error_reply = (
-            f"❌ Failed to add context '{title}'.\n"
-            f"Error: {str(e)}\n\n"
-            f"Please type @testing to try again."
-        )
-        return (True, error_reply)
+                return True, "@confirmation\nContext is added & thanks for making me better"
+            except Exception as e:
+                logger.error(f"Failed to save context from tester command: {e}")
+                return True, f"❌ Failed to add context '{title}'.\nError: {str(e)}\n\nType @testing to try again."
+
+    return False, None
+
+
+async def handle_ai_response_commands(platform: str, user_id: str, text: str) -> str:
+    """
+    Parses the AI response text for commands (responder = 'AI').
+    Executes the command side-effects and strips command tokens from the text.
+    """
+    if not text:
+        return text
+
+    # Find matches in AI output
+    matches = await find_matching_commands(text, responder="AI")
+    if not matches:
+        return text
+
+    cleaned_text = text
+    session = await conversation_manager.get_or_create(platform, user_id)
+
+    for cmd, start, end, word in matches:
+        cmd_name = cmd["command"]
+        cmd_type = cmd["command_type"]
+        
+        logger.info(f"🤖 Intercepted AI command: {word} (type: {cmd_type})")
+
+        # 1. Execute actions/side-effects
+        if cmd_name == "notification":
+            # Send notification to admins
+            try:
+                admins = await db.get_admin_users()
+                if not admins:
+                    # Default fallback admin
+                    admins = [{"platform": "messenger", "user_id": "26761204070240994", "name": "Dip Durlov"}]
+                
+                notification_msg = f"🔔 AI Notification Alert: The AI Salesman requested attention for customer {user_id} on {platform}."
+                for admin in admins:
+                    adm_plat = admin.get("platform")
+                    adm_uid = admin.get("user_id")
+                    if adm_plat and adm_uid:
+                        # Send notification to admin
+                        from agent.tool_executor import _send_platform_text
+                        await _send_platform_text(adm_plat, adm_uid, notification_msg)
+            except Exception as e:
+                logger.error(f"Failed to send admin notification: {e}")
+
+        elif cmd_name == "test_terminate":
+            # Terminate testing mode
+            session.metadata.pop("current_mode", None)
+            session.metadata.pop("mode_state", None)
+            if db.is_configured():
+                await db.create_or_update_user(platform=platform, user_id=user_id, metadata=session.metadata)
+            logger.info("🧪 Testing mode terminated by AI.")
+
+        # 2. Strip the command token from the final output text
+        cleaned_text = cleaned_text.replace(word, "").strip()
+        cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
+
+    return cleaned_text
