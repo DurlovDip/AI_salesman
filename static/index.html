@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,7 +11,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <!-- FontAwesome Icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-weight/6.4.0/css/all.min.css">
-    
+
     <style>
         :root {
             --bg-main: #0b0f19;
@@ -40,13 +41,16 @@
         ::-webkit-scrollbar {
             width: 6px;
         }
+
         ::-webkit-scrollbar-track {
             background: transparent;
         }
+
         ::-webkit-scrollbar-thumb {
             background: rgba(255, 255, 255, 0.1);
             border-radius: 4px;
         }
+
         ::-webkit-scrollbar-thumb:hover {
             background: rgba(255, 255, 255, 0.2);
         }
@@ -57,7 +61,7 @@
             height: 100vh;
             display: flex;
             overflow: hidden;
-            background-image: 
+            background-image:
                 radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
                 radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.12) 0px, transparent 50%);
         }
@@ -151,11 +155,13 @@
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: #ef4444; /* red default */
+            background: #ef4444;
+            /* red default */
         }
 
         .status-dot.active {
-            background: #10b981; /* green */
+            background: #10b981;
+            /* green */
             box-shadow: 0 0 8px #10b981;
         }
 
@@ -417,11 +423,11 @@
             border-radius: 50%;
         }
 
-        input:checked + .slider {
+        input:checked+.slider {
             background-color: var(--bg-bubble-human);
         }
 
-        input:checked + .slider:before {
+        input:checked+.slider:before {
             transform: translateX(16px);
         }
 
@@ -487,7 +493,7 @@
             line-height: 1.45;
             white-space: pre-wrap;
             position: relative;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
             word-break: break-word;
             overflow-wrap: break-word;
         }
@@ -544,12 +550,12 @@
         }
 
         .bot .sender-tag {
-            background: rgba(255,255,255,0.2);
+            background: rgba(255, 255, 255, 0.2);
             color: #fff;
         }
 
         .human .sender-tag {
-            background: rgba(255,255,255,0.2);
+            background: rgba(255, 255, 255, 0.2);
             color: #fff;
         }
 
@@ -558,7 +564,7 @@
             border: 1px solid var(--border-color);
             border-radius: 12px;
             overflow: hidden;
-            background: rgba(255,255,255,0.02);
+            background: rgba(255, 255, 255, 0.02);
             margin-top: 8px;
             max-width: 250px;
         }
@@ -595,12 +601,12 @@
             width: 100%;
             padding: 6px;
             text-align: center;
-            background: rgba(255,255,255,0.05);
+            background: rgba(255, 255, 255, 0.05);
             border-radius: 6px;
             font-size: 0.75rem;
             color: var(--text-main);
             text-decoration: none;
-            border: 1px solid rgba(255,255,255,0.05);
+            border: 1px solid rgba(255, 255, 255, 0.05);
             font-weight: 500;
         }
 
@@ -626,12 +632,25 @@
             animation: bounce 1.3s infinite ease-in-out;
         }
 
-        .typing-dot:nth-child(2) { animation-delay: 0.15s; }
-        .typing-dot:nth-child(3) { animation-delay: 0.3s; }
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.15s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.3s;
+        }
 
         @keyframes bounce {
-            0%, 60%, 100% { transform: translateY(0); }
-            30% { transform: translateY(-4px); }
+
+            0%,
+            60%,
+            100% {
+                transform: translateY(0);
+            }
+
+            30% {
+                transform: translateY(-4px);
+            }
         }
 
         /* ── Chat Footer / Input area ── */
@@ -652,8 +671,8 @@
         }
 
         .shortcut-chip {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.05);
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
             color: var(--text-muted);
             padding: 6px 12px;
             border-radius: 15px;
@@ -664,9 +683,9 @@
         }
 
         .shortcut-chip:hover {
-            background: rgba(255,255,255,0.08);
+            background: rgba(255, 255, 255, 0.08);
             color: var(--text-main);
-            border-color: rgba(255,255,255,0.1);
+            border-color: rgba(255, 255, 255, 0.1);
         }
 
         .input-wrapper {
@@ -677,7 +696,7 @@
             border: 1px solid var(--border-color);
             border-radius: 12px;
             padding: 6px 12px;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
         }
 
         .chat-input {
@@ -738,7 +757,7 @@
         }
 
         .data-card {
-            background: rgba(255,255,255,0.02);
+            background: rgba(255, 255, 255, 0.02);
             border: 1px solid var(--border-color);
             border-radius: 10px;
             padding: 14px;
@@ -765,7 +784,7 @@
         }
 
         .json-code {
-            background: rgba(0,0,0,0.3);
+            background: rgba(0, 0, 0, 0.3);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 10px;
@@ -798,13 +817,20 @@
             width: 440px;
             border-radius: 16px;
             padding: 24px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.4);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
             animation: slideUp 0.3s ease-out;
         }
 
         @keyframes slideUp {
-            from { transform: translateY(20px); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
+            from {
+                transform: translateY(20px);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
         }
 
         .modal-title {
@@ -830,7 +856,7 @@
 
         .form-control {
             width: 100%;
-            background: rgba(255,255,255,0.03);
+            background: rgba(255, 255, 255, 0.03);
             border: 1px solid var(--border-color);
             border-radius: 8px;
             padding: 10px 12px;
@@ -878,12 +904,21 @@
 
         /* Pulse for typing */
         @keyframes pulse {
-            0% { opacity: 0.6; }
-            50% { opacity: 1; }
-            100% { opacity: 0.6; }
+            0% {
+                opacity: 0.6;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                opacity: 0.6;
+            }
         }
     </style>
 </head>
+
 <body>
 
     <!-- ── Sidebar ── -->
@@ -893,7 +928,8 @@
                 <div class="logo-icon"><i class="fa-solid fa-robot"></i></div>
                 <div class="logo-text">AI Salesman</div>
             </div>
-            <span style="font-size: 0.72rem; background: rgba(99,102,241,0.2); padding: 3px 8px; border-radius: 10px; color:#c7d2fe; font-weight:600;">v1.0</span>
+            <span
+                style="font-size: 0.72rem; background: rgba(99,102,241,0.2); padding: 3px 8px; border-radius: 10px; color:#c7d2fe; font-weight:600;">v1.0</span>
         </div>
 
         <div class="connection-card">
@@ -901,14 +937,18 @@
                 <div class="status-dot" id="meta-status-dot"></div>
                 <span id="meta-status-text">Checking Meta token...</span>
             </div>
-            <div style="display: flex; gap: 10px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.05); font-size: 0.75rem; align-items: center; justify-content: space-between;">
-                <span id="status-groq" style="display: flex; align-items: center; gap: 3px; color: var(--text-muted); transition: all 0.3s ease;">
+            <div
+                style="display: flex; gap: 10px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.05); font-size: 0.75rem; align-items: center; justify-content: space-between;">
+                <span id="status-groq"
+                    style="display: flex; align-items: center; gap: 3px; color: var(--text-muted); transition: all 0.3s ease;">
                     <i class="fa-solid fa-bolt"></i> Groq
                 </span>
-                <span id="status-openai" style="display: flex; align-items: center; gap: 3px; color: var(--text-muted); transition: all 0.3s ease;">
+                <span id="status-openai"
+                    style="display: flex; align-items: center; gap: 3px; color: var(--text-muted); transition: all 0.3s ease;">
                     <i class="fa-solid fa-brain"></i> OpenAI
                 </span>
-                <span id="status-gemini" style="display: flex; align-items: center; gap: 3px; color: var(--text-muted); transition: all 0.3s ease;">
+                <span id="status-gemini"
+                    style="display: flex; align-items: center; gap: 3px; color: var(--text-muted); transition: all 0.3s ease;">
                     <i class="fa-solid fa-wand-magic-sparkles"></i> Gemini
                 </span>
             </div>
@@ -917,7 +957,8 @@
         <div id="meta-error-banner" class="alert-banner" style="display:none;">
             <i class="fa-solid fa-triangle-exclamation"></i>
             <div>
-                <strong>OAuth Error:</strong> Page access token has expired or is invalid. Fallback local testing is enabled.
+                <strong>OAuth Error:</strong> Page access token has expired or is invalid. Fallback local testing is
+                enabled.
             </div>
         </div>
 
@@ -926,7 +967,8 @@
             <div id="conv-list">
                 <!-- Loaded dynamically -->
                 <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
-                    <i class="fa-solid fa-spinner fa-spin" style="margin-bottom:8px; font-size:1.2rem; display:block;"></i>
+                    <i class="fa-solid fa-spinner fa-spin"
+                        style="margin-bottom:8px; font-size:1.2rem; display:block;"></i>
                     Loading chats...
                 </div>
             </div>
@@ -936,7 +978,8 @@
             <button class="btn btn-primary" onclick="openSimulateModal()" style="width: 100%;">
                 <i class="fa-solid fa-user-plus"></i> Simulate Customer
             </button>
-            <button class="btn btn-secondary" onclick="openOrdersModal()" style="width: 100%; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05); color: #34d399; margin: 0;">
+            <button class="btn btn-secondary" onclick="openOrdersModal()"
+                style="width: 100%; border-color: rgba(16, 185, 129, 0.3); background: rgba(16, 185, 129, 0.05); color: #34d399; margin: 0;">
                 <i class="fa-solid fa-clipboard-check"></i> Confirmed Orders
             </button>
             <div style="display: flex; gap: 8px; width: 100%;">
@@ -977,23 +1020,29 @@
             <div class="no-chat-selected">
                 <div class="no-chat-icon"><i class="fa-regular fa-comments"></i></div>
                 <h3 style="font-weight:600; font-size:1.2rem;">Welcome to the Chat Console</h3>
-                <p style="font-size:0.88rem; max-width:280px; line-height:1.4;">Select a customer from the left sidebar to view history, chat with them, or test the AI salesman triggers.</p>
+                <p style="font-size:0.88rem; max-width:280px; line-height:1.4;">Select a customer from the left sidebar
+                    to view history, chat with them, or test the AI salesman triggers.</p>
             </div>
         </div>
 
         <!-- Chat Input / Footer -->
         <div class="chat-footer" id="chat-footer" style="display:none;">
             <div class="input-shortcuts" id="shortcuts">
-                <span class="shortcut-chip" onclick="applyShortcut('Show me black t-shirts under 1200')">🔍 Black T-shirts under 1200</span>
+                <span class="shortcut-chip" onclick="applyShortcut('Show me black t-shirts under 1200')">🔍 Black
+                    T-shirts under 1200</span>
                 <span class="shortcut-chip" onclick="applyShortcut('Return policy')">❓ Return Policy</span>
-                <span class="shortcut-chip" onclick="applyShortcut('Where is my order 12345?')">📦 Track Order 12345</span>
-                <span class="shortcut-chip" onclick="applyShortcut('I want to speak to a human')"> Escalation test</span>
+                <span class="shortcut-chip" onclick="applyShortcut('Where is my order 12345?')">📦 Track Order
+                    12345</span>
+                <span class="shortcut-chip" onclick="applyShortcut('I want to speak to a human')"> Escalation
+                    test</span>
             </div>
             <div class="input-wrapper">
-                <textarea class="chat-input" id="message-input" placeholder="Type a message to the customer..." onkeydown="handleInputKey(event)"></textarea>
-                
+                <textarea class="chat-input" id="message-input" placeholder="Type a message to the customer..."
+                    onkeydown="handleInputKey(event)"></textarea>
+
                 <!-- Action dropdown (AI or Human) -->
-                <select id="send-mode" class="form-control" style="width: auto; padding: 4px 8px; font-size: 0.8rem; background: rgba(255,255,255,0.05); border: none; margin-right: 8px;">
+                <select id="send-mode" class="form-control"
+                    style="width: auto; padding: 4px 8px; font-size: 0.8rem; background: rgba(255,255,255,0.05); border: none; margin-right: 8px;">
                     <option value="human">Send as Human</option>
                     <option value="ai">Send & Trigger AI</option>
                 </select>
@@ -1008,7 +1057,7 @@
         <div class="inspector-title">
             <i class="fa-solid fa-circle-info" style="color:var(--accent-color);"></i> Session Inspector
         </div>
-        
+
         <div class="inspector-section">
             <div class="inspector-section-header">Customer Details</div>
             <div class="data-card">
@@ -1034,7 +1083,8 @@
                 </div>
                 <div class="data-row" style="align-items: center; justify-content: space-between; width: 100%;">
                     <span class="data-label">Role</span>
-                    <select id="inspect-role" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 6px; padding: 4px 8px; font-size: 0.85rem; cursor: pointer; outline: none;">
+                    <select id="inspect-role"
+                        style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-color); border-radius: 6px; padding: 4px 8px; font-size: 0.85rem; cursor: pointer; outline: none;">
                         <option value="Customer">Customer</option>
                         <option value="Tester">Tester</option>
                         <option value="Admin">Admin</option>
@@ -1046,7 +1096,8 @@
         <div class="inspector-section">
             <div class="inspector-section-header">Control Center</div>
             <div style="display:flex; flex-direction:column; gap:8px;">
-                <button class="btn btn-secondary" onclick="resetActiveSession()" style="color:#ef4444; border-color:rgba(239, 68, 68, 0.2);">
+                <button class="btn btn-secondary" onclick="resetActiveSession()"
+                    style="color:#ef4444; border-color:rgba(239, 68, 68, 0.2);">
                     <i class="fa-solid fa-trash-can"></i> Reset Conversation
                 </button>
                 <button class="btn btn-secondary" onclick="triggerManualAIResponse()">
@@ -1067,7 +1118,7 @@
             <div class="modal-title">
                 <i class="fa-solid fa-user-plus" style="color:var(--accent-color);"></i> Simulate Customer Entry
             </div>
-            
+
             <div class="form-group">
                 <label class="form-label">Customer Name</label>
                 <input type="text" id="sim-name" class="form-control" placeholder="e.g. Adnan Rahman">
@@ -1084,7 +1135,8 @@
             <div class="form-group">
                 <label class="form-label">Simulated User ID (PSID / Phone)</label>
                 <input type="text" id="sim-id" class="form-control" placeholder="e.g. 8801712345678 or 10293847">
-                <small style="font-size:0.75rem; color:var(--text-muted); margin-top:4px; display:block;">Leave blank to generate a random ID</small>
+                <small style="font-size:0.75rem; color:var(--text-muted); margin-top:4px; display:block;">Leave blank to
+                    generate a random ID</small>
             </div>
 
             <div class="form-group">
@@ -1098,11 +1150,13 @@
 
             <div class="form-group">
                 <label class="form-label">Initial Message</label>
-                <input type="text" id="sim-message" class="form-control" placeholder="e.g. Hi, show me black t-shirts under 1200" value="Hello!">
+                <input type="text" id="sim-message" class="form-control"
+                    placeholder="e.g. Hi, show me black t-shirts under 1200" value="Hello!">
             </div>
 
             <div class="modal-buttons">
-                <button class="btn btn-secondary" onclick="closeSimulateModal()" style="margin:0; flex:1;">Cancel</button>
+                <button class="btn btn-secondary" onclick="closeSimulateModal()"
+                    style="margin:0; flex:1;">Cancel</button>
                 <button class="btn btn-primary" onclick="submitSimulate()" style="margin:0; flex:1;">Simulate</button>
             </div>
         </div>
@@ -1110,29 +1164,35 @@
 
     <!-- ── AI Guidelines Modal ── -->
     <div class="modal" id="guidelines-modal">
-        <div class="modal-card" style="max-width: 650px; width: 90%; max-height: 90vh; display: flex; flex-direction: column;">
-            
+        <div class="modal-card"
+            style="max-width: 650px; width: 90%; max-height: 90vh; display: flex; flex-direction: column;">
+
             <!-- VIEW 1: Context List View (Default) -->
             <div id="context-list-view" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
-                <div class="modal-title" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <div class="modal-title"
+                    style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <i class="fa-solid fa-sliders" style="color:var(--accent-color);"></i> AI Guidelines / Context
                     </div>
-                    <button class="btn btn-primary" onclick="showCreateContextView()" style="margin: 0; padding: 6px 14px; font-size: 0.85rem; height: 34px; display: flex; align-items: center; gap: 6px;">
+                    <button class="btn btn-primary" onclick="showCreateContextView()"
+                        style="margin: 0; padding: 6px 14px; font-size: 0.85rem; height: 34px; display: flex; align-items: center; gap: 6px;">
                         <i class="fa-solid fa-plus"></i> Create Context
                     </button>
                 </div>
-                
+
                 <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 15px; margin-top: 0;">
-                    Manage dynamic context guidelines that direct the AI. Universal contexts are always active; Special contexts can be toggled.
+                    Manage dynamic context guidelines that direct the AI. Universal contexts are always active; Special
+                    contexts can be toggled.
                 </p>
 
-                <div id="contexts-list-container" style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px;">
+                <div id="contexts-list-container"
+                    style="flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-right: 4px;">
                     <!-- Loaded dynamically via renderContextList() -->
                 </div>
 
                 <div class="modal-buttons" style="margin-top: 20px; display: flex; gap: 8px;">
-                    <button class="btn btn-secondary" onclick="closeGuidelinesModal()" style="margin:0; width: 100%;">Close</button>
+                    <button class="btn btn-secondary" onclick="closeGuidelinesModal()"
+                        style="margin:0; width: 100%;">Close</button>
                 </div>
             </div>
 
@@ -1141,19 +1201,24 @@
                 <div class="modal-title" id="context-edit-title">
                     <i class="fa-solid fa-pen-to-square" style="color:var(--accent-color);"></i> Edit Context
                 </div>
-                
-                <div style="flex: 1; overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px;">
+
+                <div
+                    style="flex: 1; overflow-y: auto; padding-right: 4px; display: flex; flex-direction: column; gap: 12px; margin-bottom: 15px;">
                     <!-- Hidden input to track editing ID -->
                     <input type="hidden" id="edit-context-id">
 
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label">Context Name</label>
-                        <input type="text" id="context-name-input" class="form-control" placeholder="e.g. Standard Sales Rules" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-color);">
+                        <input type="text" id="context-name-input" class="form-control"
+                            placeholder="e.g. Standard Sales Rules"
+                            style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-color);">
                     </div>
 
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label">Context Type</label>
-                        <select id="context-type-select" class="form-control" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-color); padding-right: 32px;" class="form-select">
+                        <select id="context-type-select" class="form-control"
+                            style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-color); padding-right: 32px;"
+                            class="form-select">
                             <option value="special">Special (Can be toggled active/inactive)</option>
                             <option value="universal">Universal (Always active)</option>
                         </select>
@@ -1161,18 +1226,24 @@
 
                     <div class="form-group" style="margin-bottom: 0;">
                         <label class="form-label">Description / Test Details</label>
-                        <input type="text" id="context-desc-input" class="form-control" placeholder="e.g. General guidelines for standard sales assistant mode" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-color);">
+                        <input type="text" id="context-desc-input" class="form-control"
+                            placeholder="e.g. General guidelines for standard sales assistant mode"
+                            style="background: rgba(255,255,255,0.05); border: 1px solid var(--border-color); color: var(--text-color);">
                     </div>
-                    
+
                     <div class="form-group" style="flex: 1; display: flex; flex-direction: column; margin-bottom: 0;">
                         <label class="form-label">System Guidelines & Rules (Text)</label>
-                        <textarea id="guidelines-textarea" class="form-control" style="height: 220px; font-family: monospace; font-size: 0.85rem; line-height: 1.5; resize: vertical;" placeholder="- Respond to customers in their language..."></textarea>
-                        <small style="font-size:0.75rem; color:var(--text-muted); margin-top:4px; display:block;">These guidelines are dynamically loaded and merged into the AI System Prompt.</small>
+                        <textarea id="guidelines-textarea" class="form-control"
+                            style="height: 220px; font-family: monospace; font-size: 0.85rem; line-height: 1.5; resize: vertical;"
+                            placeholder="- Respond to customers in their language..."></textarea>
+                        <small style="font-size:0.75rem; color:var(--text-muted); margin-top:4px; display:block;">These
+                            guidelines are dynamically loaded and merged into the AI System Prompt.</small>
                     </div>
                 </div>
 
                 <div class="modal-buttons" style="display: flex; gap: 8px;">
-                    <button class="btn btn-secondary" onclick="backToContextListView()" style="margin:0; flex:1;">Cancel</button>
+                    <button class="btn btn-secondary" onclick="backToContextListView()"
+                        style="margin:0; flex:1;">Cancel</button>
                     <button class="btn btn-primary" onclick="saveCurrentContext()" style="margin:0; flex:1.5;">
                         <i class="fa-solid fa-floppy-disk"></i> Save Context
                     </button>
@@ -1187,12 +1258,14 @@
             <div class="modal-title">
                 <i class="fa-solid fa-clipboard-check" style="color:#10b981;"></i> Confirmed Customer Orders
             </div>
-            
+
             <div class="form-group" style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-                <div style="overflow-x: auto; width: 100%; border: 1px solid var(--border-color); border-radius: 8px; background: rgba(0,0,0,0.2); max-height: 450px;">
+                <div
+                    style="overflow-x: auto; width: 100%; border: 1px solid var(--border-color); border-radius: 8px; background: rgba(0,0,0,0.2); max-height: 450px;">
                     <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 0.85rem;">
                         <thead>
-                            <tr style="border-bottom: 1px solid var(--border-color); background: rgba(255,255,255,0.02); color: var(--text-muted);">
+                            <tr
+                                style="border-bottom: 1px solid var(--border-color); background: rgba(255,255,255,0.02); color: var(--text-muted);">
                                 <th style="padding: 12px 16px; font-weight: 600;">Date/Time</th>
                                 <th style="padding: 12px 16px; font-weight: 600;">Customer</th>
                                 <th style="padding: 12px 16px; font-weight: 600;">Phone</th>
@@ -1208,30 +1281,55 @@
             </div>
 
             <div class="modal-buttons" style="margin-top: 15px;">
-                <button class="btn btn-secondary" onclick="closeOrdersModal()" style="margin:0; width: 100%;">Close</button>
+                <button class="btn btn-secondary" onclick="closeOrdersModal()"
+                    style="margin:0; width: 100%;">Close</button>
             </div>
         </div>
     </div>
 
     <!-- ── Javascript Logic ── -->
     <script>
-        const API_BASE = "";
+        // Always use absolute origin so relative fetches work correctly
+        // after Vercel deploys (avoids ERR_NETWORK_CHANGED on cold starts).
+        const API_BASE = window.location.origin;
         let conversations = [];
         let activeChat = null;
         let isTyping = false;
 
+        /**
+         * Fetch wrapper that retries once on network errors.
+         * This handles the ERR_NETWORK_CHANGED race condition on Vercel
+         * where the first request fires before the network is fully stable.
+         */
+        async function apiFetch(url, options = {}, retries = 2) {
+            for (let attempt = 1; attempt <= retries; attempt++) {
+                try {
+                    const res = await fetch(url, options);
+                    return res;
+                } catch (err) {
+                    if (attempt === retries) throw err;
+                    // Wait 800ms before retrying
+                    await new Promise(r => setTimeout(r, 800));
+                }
+            }
+        }
+
         // On Load
         window.addEventListener('DOMContentLoaded', () => {
-            checkMetaStatus();
-            checkAIStatus();
-            loadConversations();
-            
+            // Small delay on first load to let Vercel's serverless function
+            // warm up before firing API calls (avoids ERR_NETWORK_CHANGED).
+            setTimeout(() => {
+                checkMetaStatus();
+                checkAIStatus();
+                loadConversations();
+            }, 500);
+
             // Add listener for role select
             const roleSelect = document.getElementById('inspect-role');
             if (roleSelect) {
                 roleSelect.addEventListener('change', updateUserRole);
             }
-            
+
             // Poll for new messages every 5 seconds
             setInterval(() => {
                 loadConversations(true);
@@ -1249,15 +1347,15 @@
         // ── API Calls ──
         async function checkMetaStatus() {
             try {
-                const res = await fetch(`${API_BASE}/health`);
+                const res = await apiFetch(`${API_BASE}/health`);
                 const data = await res.json();
-                
+
                 const dot = document.getElementById('meta-status-dot');
                 const text = document.getElementById('meta-status-text');
                 const banner = document.getElementById('meta-error-banner');
 
                 if (data.messenger) {
-                    const convRes = await fetch(`${API_BASE}/api/facebook/conversations`);
+                    const convRes = await apiFetch(`${API_BASE}/api/facebook/conversations`);
                     const convData = await convRes.json();
                     if (convData.meta_api_error) {
                         dot.className = 'status-dot';
@@ -1279,9 +1377,9 @@
 
         async function checkAIStatus() {
             try {
-                const res = await fetch(`${API_BASE}/api/ai/status`);
+                const res = await apiFetch(`${API_BASE}/api/ai/status`);
                 const data = await res.json();
-                
+
                 updateAIIndicator('groq', data.groq);
                 updateAIIndicator('openai', data.openai);
                 updateAIIndicator('gemini', data.gemini);
@@ -1293,7 +1391,7 @@
         function updateAIIndicator(provider, status) {
             const el = document.getElementById(`status-${provider}`);
             if (!el) return;
-            
+
             if (status && status.configured && status.reachable) {
                 el.style.color = '#10b981'; // green
                 el.style.opacity = '1';
@@ -1314,9 +1412,9 @@
 
         async function loadConversations(isSilent = false) {
             try {
-                const res = await fetch(`${API_BASE}/api/facebook/conversations`);
+                const res = await apiFetch(`${API_BASE}/api/facebook/conversations`);
                 const data = await res.json();
-                
+
                 conversations = data.conversations || [];
                 renderConversations();
             } catch (e) {
@@ -1340,7 +1438,7 @@
             conversations.forEach(c => {
                 const isActive = activeChat && activeChat.user_id === c.user_id && activeChat.platform === c.platform;
                 const initials = (c.participant_name || 'U').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-                
+
                 let timeStr = '---';
                 if (c.updated_time) {
                     const date = new Date(c.updated_time);
@@ -1387,7 +1485,7 @@
             document.getElementById('inspect-name').innerText = selected.participant_name || 'Anonymous';
             document.getElementById('inspect-platform').innerText = selected.platform.toUpperCase();
             document.getElementById('inspect-id').innerText = selected.user_id;
-            
+
             // Format active header
             document.getElementById('active-avatar').innerText = (selected.participant_name || 'U').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
             document.getElementById('active-username').innerText = selected.participant_name || 'Anonymous';
@@ -1402,9 +1500,9 @@
         async function loadActiveChatMessages(isSilent = false) {
             if (!activeChat) return;
             try {
-                const res = await fetch(`${API_BASE}/api/facebook/conversations/${activeChat.conversation_id}/messages?platform=${activeChat.platform}&user_id=${activeChat.user_id}&participant_name=${encodeURIComponent(activeChat.participant_name)}`);
+                const res = await apiFetch(`${API_BASE}/api/facebook/conversations/${activeChat.conversation_id}/messages?platform=${activeChat.platform}&user_id=${activeChat.user_id}&participant_name=${encodeURIComponent(activeChat.participant_name)}`);
                 const data = await res.json();
-                
+
                 renderMessages(data.messages || [], data.session || null);
             } catch (e) {
                 console.error("Failed to load messages:", e);
@@ -1413,7 +1511,7 @@
 
         function renderMessages(messages, session) {
             const chatLog = document.getElementById('chat-messages');
-            
+
             // Save scroll position
             const wasAtBottom = chatLog.scrollHeight - chatLog.scrollTop <= chatLog.clientHeight + 40;
 
@@ -1500,7 +1598,7 @@
                 document.getElementById('handoff-toggle').checked = session.human_handoff;
                 document.getElementById('inspect-ai-status').innerText = session.human_handoff ? 'Paused (Human Takeover)' : 'Active (AI Auto-Reply)';
                 document.getElementById('inspect-last-active').innerText = new Date(session.last_active * 1000).toLocaleTimeString();
-                
+
                 // Update role selector dropdown value
                 const userRole = (session.metadata && session.metadata.role) || "Customer";
                 const roleSelect = document.getElementById('inspect-role');
@@ -1531,14 +1629,14 @@
 
             // Optimistically add message
             input.value = '';
-            
+
             try {
                 if (mode === 'ai') {
                     isTyping = true;
                     loadActiveChatMessages();
                 }
 
-                const res = await fetch(`${API_BASE}/api/facebook/send`, {
+                const res = await apiFetch(`${API_BASE}/api/facebook/send`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1548,9 +1646,9 @@
                         sender: mode
                     })
                 });
-                
+
                 const data = await res.json();
-                
+
                 isTyping = false;
                 await loadActiveChatMessages();
                 await loadConversations();
@@ -1566,12 +1664,12 @@
             const targetVal = toggle.checked; // note: click already toggled checkbox value
 
             try {
-                const res = await fetch(`${API_BASE}/api/facebook/conversations/${activeChat.platform}/${activeChat.user_id}/handoff`, {
+                const res = await apiFetch(`${API_BASE}/api/facebook/conversations/${activeChat.platform}/${activeChat.user_id}/handoff`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ human_handoff: targetVal })
                 });
-                
+
                 await loadActiveChatMessages();
                 await loadConversations();
             } catch (e) {
@@ -1584,7 +1682,7 @@
             if (!confirm("Are you sure you want to reset this customer session history? This clears all message logs in memory.")) return;
 
             try {
-                await fetch(`${API_BASE}/api/facebook/conversations/${activeChat.platform}/${activeChat.user_id}/reset`, {
+                await apiFetch(`${API_BASE}/api/facebook/conversations/${activeChat.platform}/${activeChat.user_id}/reset`, {
                     method: 'POST'
                 });
                 await loadActiveChatMessages();
@@ -1600,7 +1698,7 @@
             loadActiveChatMessages();
 
             try {
-                const res = await fetch(`${API_BASE}/api/facebook/conversations/${activeChat.platform}/${activeChat.user_id}/ai-respond`, {
+                const res = await apiFetch(`${API_BASE}/api/facebook/conversations/${activeChat.platform}/${activeChat.user_id}/ai-respond`, {
                     method: 'POST'
                 });
                 isTyping = false;
@@ -1616,7 +1714,7 @@
             if (!activeChat) return;
             const newRole = document.getElementById('inspect-role').value;
             try {
-                const res = await fetch(`${API_BASE}/api/users/update-role`, {
+                const res = await apiFetch(`${API_BASE}/api/users/update-role`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1625,15 +1723,15 @@
                         role: newRole
                     })
                 });
-                
+
                 if (res.ok) {
                     // Update activeChat metadata locally
                     if (!activeChat.metadata) activeChat.metadata = {};
                     activeChat.metadata.role = newRole;
-                    
+
                     // Reload active chat messages to refresh raw JSON session preview
                     await loadActiveChatMessages(true);
-                    
+
                     alert(`User role updated to ${newRole} successfully.`);
                 } else {
                     const err = await res.json();
@@ -1681,7 +1779,7 @@
             }
 
             try {
-                const res = await fetch(`${API_BASE}/api/facebook/simulate`, {
+                const res = await apiFetch(`${API_BASE}/api/facebook/simulate`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -1693,7 +1791,7 @@
                     })
                 });
                 const data = await res.json();
-                
+
                 closeSimulateModal();
                 // Clear fields
                 document.getElementById('sim-name').value = '';
@@ -1714,14 +1812,14 @@
         async function openGuidelinesModal() {
             try {
                 // Fetch all contexts
-                const res = await fetch(`${API_BASE}/api/contexts`);
+                const res = await apiFetch(`${API_BASE}/api/contexts`);
                 globalContexts = await res.json();
 
                 document.getElementById('guidelines-modal').style.display = 'flex';
-                
+
                 // Reset to list view default
                 backToContextListView();
-                
+
                 // Render list
                 renderContextList();
             } catch (e) {
@@ -1737,7 +1835,7 @@
         function renderContextList() {
             const container = document.getElementById('contexts-list-container');
             container.innerHTML = '';
-            
+
             if (globalContexts.length === 0) {
                 container.innerHTML = `
                     <div style="padding: 20px; text-align: center; color: var(--text-muted); font-size: 0.85rem;">
@@ -1746,15 +1844,15 @@
                 `;
                 return;
             }
-            
+
             globalContexts.forEach(c => {
                 const item = document.createElement('div');
                 item.className = 'context-item';
                 item.style = 'display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-radius: 8px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05); transition: background 0.2s;';
-                
+
                 const isUniversal = c.context_type === 'universal';
                 const isChecked = isUniversal || c.is_active;
-                
+
                 item.innerHTML = `
                     <div style="display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0;">
                         <span style="font-weight: 600; font-size: 0.95rem; color: var(--text-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
@@ -1764,13 +1862,13 @@
                             ${c.description || 'No description'}
                         </span>
                     </div>
-                    
+
                     <div style="display: flex; align-items: center; gap: 12px; flex-shrink: 0;">
                         <!-- Badge -->
                         <span class="badge" style="font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; font-weight: 500; text-transform: uppercase; background: ${isUniversal ? 'rgba(59,130,246,0.15); color: #60a5fa;' : 'rgba(168,85,247,0.15); color: #c084fc;'}">
                             ${isUniversal ? 'Universal' : 'Special'}
                         </span>
-                        
+
                         <!-- Toggle (only for non-universal) -->
                         ${isUniversal ? `
                             <span class="badge" style="background: rgba(16, 185, 129, 0.15); color: #34d399; font-size: 0.75rem; padding: 2px 6px; border-radius: 4px;">Always Active</span>
@@ -1785,7 +1883,7 @@
                                 </label>
                             </div>
                         `}
-                        
+
                         <!-- Edit Button -->
                         <button class="btn btn-secondary" onclick="showEditContextView('${c.id}')" style="margin: 0; padding: 4px 10px; font-size: 0.8rem; display: flex; align-items: center; gap: 4px; border-color: rgba(255,255,255,0.1); background: rgba(255,255,255,0.03); height: 30px;">
                             <i class="fa-solid fa-pen-to-square"></i> Edit
@@ -1798,12 +1896,12 @@
 
         async function toggleContextCheck(id, checked) {
             try {
-                const res = await fetch(`${API_BASE}/api/contexts/toggle-active`, {
+                const res = await apiFetch(`${API_BASE}/api/contexts/toggle-active`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: id, is_active: checked })
                 });
-                
+
                 if (res.ok) {
                     // Update local globalContexts item state
                     const ctx = globalContexts.find(c => c.id === id);
@@ -1830,15 +1928,15 @@
             document.getElementById('context-desc-input').value = '';
             document.getElementById('guidelines-textarea').value = '';
             document.getElementById('context-type-select').value = 'special';
-            
+
             document.getElementById('context-edit-title').innerHTML = `
                 <i class="fa-solid fa-plus" style="color:var(--accent-color);"></i> Create New Context
             `;
-            
+
             // Switch view
             document.getElementById('context-list-view').style.display = 'none';
             document.getElementById('context-edit-view').style.display = 'flex';
-            
+
             // Focus name input
             document.getElementById('context-name-input').focus();
         }
@@ -1846,18 +1944,18 @@
         function showEditContextView(id) {
             const ctx = globalContexts.find(c => c.id === id);
             if (!ctx) return;
-            
+
             // Populate inputs
             document.getElementById('edit-context-id').value = ctx.id || '';
             document.getElementById('context-name-input').value = ctx.context_name || '';
             document.getElementById('context-desc-input').value = ctx.description || '';
             document.getElementById('guidelines-textarea').value = ctx.text || '';
             document.getElementById('context-type-select').value = ctx.context_type || 'special';
-            
+
             document.getElementById('context-edit-title').innerHTML = `
                 <i class="fa-solid fa-pen-to-square" style="color:var(--accent-color);"></i> Edit Context: ${ctx.context_name}
             `;
-            
+
             // Switch view
             document.getElementById('context-list-view').style.display = 'none';
             document.getElementById('context-edit-view').style.display = 'flex';
@@ -1899,7 +1997,7 @@
             }
 
             try {
-                const res = await fetch(`${API_BASE}/api/contexts`, {
+                const res = await apiFetch(`${API_BASE}/api/contexts`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -1912,7 +2010,7 @@
                 }
 
                 // Re-fetch all contexts to refresh list
-                const listRes = await fetch(`${API_BASE}/api/contexts`);
+                const listRes = await apiFetch(`${API_BASE}/api/contexts`);
                 globalContexts = await listRes.json();
 
                 renderContextList();
@@ -1926,10 +2024,10 @@
 
         async function openOrdersModal() {
             try {
-                const res = await fetch(`${API_BASE}/api/orders/confirmed`);
+                const res = await apiFetch(`${API_BASE}/api/orders/confirmed`);
                 const data = await res.json();
                 const tbody = document.getElementById('orders-table-body');
-                
+
                 let html = '';
                 if (!data.orders || data.orders.length === 0) {
                     html = `
@@ -1965,4 +2063,5 @@
         }
     </script>
 </body>
+
 </html>
