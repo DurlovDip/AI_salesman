@@ -115,5 +115,32 @@
         "context_type": "universal",
         "is_active": true,
         "user_id": null
+    },
+    {
+        "id": "fea5d3eb-d560-593e-a047-671085b4a9da",
+        "context_name": "Dont Give - \"নমস্কার\" IMPORTANT - must follow...",
+        "description": "",
+        "text": "Dont Give - \"নমস্কার\"  IMPORTANT - must follow...",
+        "context_type": "universal",
+        "is_active": true,
+        "user_id": null
+    },
+    {
+        "id": "75f35789-9050-54c5-b4ac-371d5e26cdbe",
+        "context_name": "Vai",
+        "description": "Created by tester Hasibul Islam Sifat (messenger:26900917239599672)",
+        "text": "Vai context add korar ekta demo video dile valo moto bujhte partam",
+        "context_type": "universal",
+        "is_active": true,
+        "user_id": null
+    },
+    {
+        "id": "172d9eb2-75b6-5c57-9d60-e201584c22c7",
+        "context_name": "You should use different names too",
+        "description": "Created by tester Raton Ray (messenger:26921179700884628)",
+        "text": "1.Raiyan Riddo\n2.Arisha Jahan\n3.Lamha Islam\n 4.Sinthiya Meherin\nYou can use these if you want.",
+        "context_type": "universal",
+        "is_active": true,
+        "user_id": null
     }
 ]

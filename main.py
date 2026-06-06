@@ -89,12 +89,10 @@ async def _poll_facebook_loop() -> None:
                 if p_id != "unknown":
                     from database import db
                     if db.is_configured():
-                        asyncio.create_task(
-                            db.create_or_update_user(
-                                platform="messenger",
-                                user_id=p_id,
-                                name=p_name
-                            )
+                        await db.create_or_update_user(
+                            platform="messenger",
+                            user_id=p_id,
+                            name=p_name
                         )
                 
                 session = await conversation_manager.get_or_create("messenger", p_id)
@@ -147,9 +145,9 @@ async def _poll_facebook_loop() -> None:
                         if not m_text:
                             continue
                         if f_id == page_id:
-                            session.add_message("assistant", m_text, message_id=m_id)
+                            await session.add_message("assistant", m_text, message_id=m_id)
                         else:
-                            session.add_message("user", m_text, message_id=m_id)
+                            await session.add_message("user", m_text, message_id=m_id)
                     
                     # Verify if the last message is still a 'user' message after sync
                     if session.messages and session.messages[-1]["role"] == "user":
@@ -169,7 +167,7 @@ async def _poll_facebook_loop() -> None:
                             if was_handled:
                                 await messenger_api.send_text_chunked(p_id, confirmation_reply)
                                 session.metadata["last_responded_msg_id"] = last_fb_msg_id
-                                session.add_message("assistant", confirmation_reply)
+                                await session.add_message("assistant", confirmation_reply)
                                 logger.info(f"🧪 Polling: tester command handled for {p_name}")
                                 continue
                             # ────────────────────────────────────────────────────
@@ -192,7 +190,7 @@ async def _poll_facebook_loop() -> None:
                             session.metadata["last_responded_msg_id"] = last_fb_msg_id
                             
                             # Add to session
-                            session.add_message("assistant", response_text)
+                            await session.add_message("assistant", response_text)
                             logger.info(f"✅ Polling sent AI reply to Dip Durlov: '{response_text}'")
                         except Exception as poll_err:
                             logger.error(f"Error generating or sending polling response: {poll_err}")
@@ -364,7 +362,7 @@ async def lifespan(app: FastAPI):
     else:
         logger.info("ℹ️ Running on Vercel: disabling Facebook polling loop to prevent duplicate replies")
     # Start local data migration task
-    asyncio.create_task(sync_local_data_to_supabase())
+    await sync_local_data_to_supabase()
 
     yield
 
@@ -769,7 +767,7 @@ async def test_message(body: dict):
 
     # Get or create session
     session = await conversation_manager.get_or_create(platform, user_id)
-    session.add_message("user", text)
+    await session.add_message("user", text)
 
     # Get AI response
     response_text, _ = await get_ai_response(
@@ -778,7 +776,7 @@ async def test_message(body: dict):
         user_id=user_id,
     )
 
-    session.add_message("assistant", response_text)
+    await session.add_message("assistant", response_text)
 
     return {
         "response": response_text,
@@ -843,12 +841,10 @@ async def api_facebook_conversations():
                     if p_id != "unknown":
                         from database import db
                         if db.is_configured():
-                            asyncio.create_task(
-                                db.create_or_update_user(
-                                    platform="messenger",
-                                    user_id=p_id,
-                                    name=p_name
-                                )
+                            await db.create_or_update_user(
+                                platform="messenger",
+                                user_id=p_id,
+                                name=p_name
                             )
                     
                     session = conversation_manager.get("messenger", p_id)
@@ -979,11 +975,11 @@ async def api_facebook_messages(conversation_id: str, platform: str, user_id: st
                     
                 if from_id == page_id:
                     # Message from page
-                    session.add_message("assistant", text, message_id=msg_id)
+                    await session.add_message("assistant", text, message_id=msg_id)
                     session.messages[-1]["sender_type"] = "human"
                 else:
                     # Message from user
-                    session.add_message("user", text, message_id=msg_id)
+                    await session.add_message("user", text, message_id=msg_id)
         except Exception as e:
             logger.warning(f"⚠️ Failed to sync message history from Meta for thread {conversation_id}: {e}")
 
@@ -1042,8 +1038,8 @@ async def api_facebook_send(
     session = await conversation_manager.get_or_create(platform, user_id)
     
     if sender == "human":
-        session.human_handoff = True
-        session.add_message("assistant", text)
+        await session.set_human_handoff(True)
+        await session.add_message("assistant", text)
         session.messages[-1]["sender_type"] = "human"
         
         if platform == "messenger" and settings.messenger_configured:
@@ -1055,7 +1051,7 @@ async def api_facebook_send(
         return {"status": "sent", "sender": "human"}
     else:
         # Simulate incoming user message and trigger AI response
-        session.add_message("user", text)
+        await session.add_message("user", text)
         
         from agent.salesman import get_ai_response
         response_text, _ = await get_ai_response(
@@ -1063,7 +1059,7 @@ async def api_facebook_send(
             platform=platform,
             user_id=user_id,
         )
-        session.add_message("assistant", response_text)
+        await session.add_message("assistant", response_text)
         
         if platform == "messenger" and settings.messenger_configured:
             await messenger_api.send_text_chunked(user_id, response_text)
@@ -1080,7 +1076,7 @@ async def api_facebook_handoff(platform: str, user_id: str, body: dict):
     session = conversation_manager.get(platform, user_id)
     if not session:
         return JSONResponse(status_code=404, content={"detail": "Session not found"})
-    session.human_handoff = body.get("human_handoff", True)
+    await session.set_human_handoff(body.get("human_handoff", True))
     return {"status": "ok", "human_handoff": session.human_handoff}
 
 
@@ -1090,7 +1086,7 @@ async def api_facebook_reset(platform: str, user_id: str):
     session = conversation_manager.get(platform, user_id)
     if not session:
         return JSONResponse(status_code=404, content={"detail": "Session not found"})
-    session.reset()
+    await session.reset()
     return {"status": "reset"}
 
 
@@ -1107,7 +1103,7 @@ async def api_facebook_ai_respond(platform: str, user_id: str):
         platform=platform,
         user_id=user_id,
     )
-    session.add_message("assistant", response_text)
+    await session.add_message("assistant", response_text)
     
     if platform == "messenger" and settings.messenger_configured:
         await messenger_api.send_text_chunked(user_id, response_text)
@@ -1142,7 +1138,7 @@ async def api_facebook_simulate(
     session.metadata["role"] = role
     
     msg = initial_message or "Hello!"
-    session.add_message("user", msg)
+    await session.add_message("user", msg)
     
     from agent.salesman import get_ai_response
     response_text, _ = await get_ai_response(
@@ -1150,7 +1146,7 @@ async def api_facebook_simulate(
         platform=platform,
         user_id=uid,
     )
-    session.add_message("assistant", response_text)
+    await session.add_message("assistant", response_text)
     
     return {
         "status": "simulated",

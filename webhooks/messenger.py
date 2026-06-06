@@ -229,7 +229,7 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
         await db.increment_message_count("messenger", sender_id)
 
     # Add user message to history
-    session.add_message("user", user_text, message_id=message_id)
+    await session.add_message("user", user_text, message_id=message_id)
 
     # ── TESTER COMMAND INTERCEPTION ───────────────────────────────────────────
     # If the user is a Tester and sends a @testing command, handle it here
@@ -242,7 +242,7 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
         user_name=full_name,
     )
     if was_handled:
-        session.add_message("assistant", confirmation_reply)
+        await session.add_message("assistant", confirmation_reply)
         await messenger_api.send_text_chunked(sender_id, confirmation_reply)
         return
     # ──────────────────────────────────────────────────────────────────────────
@@ -262,7 +262,7 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
             "Type 'restart' to start a new conversation with the AI."
         )
         if user_text.lower().strip() == "restart":
-            session.reset()
+            await session.reset()
             await messenger_api.send_text(sender_id, "Fresh start! 🔄 How can I help you?")
         await messenger_api.send_typing_off(sender_id)
         return
@@ -276,11 +276,11 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
         )
 
         # Add assistant response to history
-        session.add_message("assistant", response_text)
+        await session.add_message("assistant", response_text)
 
         # Check for human handoff request in response
         if "connecting you with a human" in response_text.lower():
-            session.human_handoff = True
+            await session.set_human_handoff(True)
 
         # Send the response (chunked if long)
         await messenger_api.send_typing_off(sender_id)

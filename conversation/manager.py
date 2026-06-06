@@ -48,21 +48,18 @@ class ConversationSession:
     def human_handoff(self) -> bool:
         return self._human_handoff
 
-    @human_handoff.setter
-    def human_handoff(self, value: bool) -> None:
+    async def set_human_handoff(self, value: bool) -> None:
         self._human_handoff = value
-        # Sync handoff to Supabase in background
+        # Sync handoff to Supabase
         from database import db
         if db.is_configured():
-            asyncio.create_task(
-                db.create_or_update_user(
-                    platform=self.platform,
-                    user_id=self.user_id,
-                    human_handoff=value
-                )
+            await db.create_or_update_user(
+                platform=self.platform,
+                user_id=self.user_id,
+                human_handoff=value
             )
 
-    def add_message(self, role: str, content: str, message_id: Optional[str] = None) -> None:
+    async def add_message(self, role: str, content: str, message_id: Optional[str] = None) -> None:
         """Add a message, trim history, and sync to Supabase."""
         # Prevent duplicate message insertion if the last message in history has the same message_id
         if message_id and self.messages and self.messages[-1].get("message_id") == message_id:
@@ -80,21 +77,19 @@ class ConversationSession:
         if len(self.messages) > max_msgs:
             self.messages = self.messages[-max_msgs:]
 
-        # Sync to Supabase in background
+        # Sync to Supabase
         from database import db
         if db.is_configured():
-            asyncio.create_task(
-                db.save_message(
-                    platform=self.platform,
-                    user_id=self.user_id,
-                    role=role,
-                    content=content,
-                    message_id=message_id
-                )
+            await db.save_message(
+                platform=self.platform,
+                user_id=self.user_id,
+                role=role,
+                content=content,
+                message_id=message_id
             )
 
 
-    def add_tool_messages(self, tool_messages: List[Dict]) -> None:
+    async def add_tool_messages(self, tool_messages: List[Dict]) -> None:
         """Add tool call + result messages from the AI agent and sync to Supabase."""
         self.messages.extend(tool_messages)
         self.last_active = time.time()
@@ -103,7 +98,7 @@ class ConversationSession:
         if len(self.messages) > max_msgs:
             self.messages = self.messages[-max_msgs:]
 
-        # Sync to Supabase in background
+        # Sync to Supabase
         from database import db
         if db.is_configured():
             for msg in tool_messages:
@@ -112,16 +107,14 @@ class ConversationSession:
                 name = msg.get("name")
                 tool_calls = msg.get("tool_calls")
                 tool_call_id = msg.get("tool_call_id")
-                asyncio.create_task(
-                    db.save_message(
-                        platform=self.platform,
-                        user_id=self.user_id,
-                        role=role,
-                        content=content,
-                        name=name,
-                        tool_calls=tool_calls,
-                        tool_call_id=tool_call_id
-                    )
+                await db.save_message(
+                    platform=self.platform,
+                    user_id=self.user_id,
+                    role=role,
+                    content=content,
+                    name=name,
+                    tool_calls=tool_calls,
+                    tool_call_id=tool_call_id
                 )
 
     def get_chat_messages(self) -> List[Dict]:
@@ -141,11 +134,11 @@ class ConversationSession:
             cleaned.append(m)
         return cleaned
 
-    def reset(self) -> None:
+    async def reset(self) -> None:
         """Clear conversation history (in-memory and handoff state)."""
         self.messages = []
         self.last_active = time.time()
-        self.human_handoff = False
+        await self.set_human_handoff(False)
 
 
 class ConversationManager:
