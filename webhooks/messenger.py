@@ -15,7 +15,7 @@ import json
 import logging
 from typing import Any, Dict
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query, Request, Response
 
 from config import settings
 from agent.salesman import get_ai_response
@@ -47,7 +47,7 @@ async def verify_messenger(
     """
     if hub_mode == "subscribe" and hub_verify_token == settings.META_VERIFY_TOKEN:
         logger.info("✅ Messenger webhook verified successfully")
-        return int(hub_challenge)
+        return Response(content=hub_challenge, media_type="text/plain")
 
     logger.warning(
         f"❌ Messenger webhook verification failed: mode={hub_mode}, token={hub_verify_token}"
