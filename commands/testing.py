@@ -39,9 +39,12 @@ class TestingModeHandler(BaseCommandHandler):
 
             if cmd_type == "mediator":
                 if cmd_name == "end":
-                    # Clear current_mode locally so AI receives the message
-                    # Returning (False, None) lets the message pass through to LLM
-                    return False, None
+                    session.metadata.pop("current_mode", None)
+                    session.metadata.pop("mode_state", None)
+                    if db.is_configured():
+                        await db.create_or_update_user(platform=platform, user_id=user_id, metadata=session.metadata)
+                    logger.info("🧪 Testing mode dismissed by tester @end.")
+                    return True, "Testing mode cancelled. Context creation dismissed."
                 session.metadata["mode_state"]["awaiting"] = None
 
             # Handle plain response text if we are in testing mode and awaiting a parameter
