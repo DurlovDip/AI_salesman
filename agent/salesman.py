@@ -61,6 +61,10 @@ You can help customers with:
 - When showing multiple products, summarize them in a readable format with prices.
 - If the customer seems frustrated or the issue is complex, offer human_handoff.
 
+## Image Handling and Visual Search
+1. **Analyzing Incoming Images**: If the user shares an image (a photo of a shirt, dress, style reference, etc.), you will receive it along with their message. Analyze the image to describe the garment (type, style, color, pattern, material). Immediately invoke `search_products` using those keywords to find matching items from our store catalog. Explain what you see in the photo and present the matched items.
+2. **Sending Product Images**: When listing or recommending a product, if the tool returns a valid image URL for that product (e.g., in the product's `"image"` field), append `[IMAGE: image_url]` immediately after the product's description or link. Keep this formatting tag exactly as specified so the messaging channel can intercept and deliver it as an image attachment.
+
 ## Order Confirmation Flow
 When a customer wants to place or confirm an order:
 1. You MUST collect their Name, Phone Number, and Delivery/Shipping Address if they are missing from the "Customer Profile" section below.
@@ -77,6 +81,7 @@ When a customer wants to place or confirm an order:
   1. Product Name — ৳Price
   2. Product Name — ৳Price
 - Include the product URL: {settings.STORE_URL}/products/[slug]
+
 """
 
 
@@ -581,7 +586,8 @@ async def _call_ai_with_tools(messages: List[Dict]) -> Dict:
             logger.warning(f"{provider} direct error: {result.get('error')}")
             mark_provider_failed(provider)
         except Exception as e:
-            logger.error(f"{provider} direct call failed: {e}")
+            import traceback
+            logger.error(f"{provider} direct call failed: {e}\n{traceback.format_exc()}")
             mark_provider_failed(provider)
 
     return {"error": "No AI provider available"}
@@ -630,7 +636,7 @@ async def _call_gemini_direct(messages: List[Dict]) -> Dict:
     Fallback: call Gemini API directly with function calling.
     Uses the google-generativeai REST API.
     """
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
     params = {"key": settings.GEMINI_API_KEY}
 
     # Convert to Gemini format
@@ -647,45 +653,85 @@ async def _call_gemini_direct(messages: List[Dict]) -> Dict:
         if role == "assistant":
             gemini_role = "model"
         elif role == "tool":
-            # Gemini uses functionResponse
-            contents.append({
-                "role": "function",
-                "parts": [{
-                    "functionResponse": {
-                        "name": msg.get("name", ""),
-                        "response": {
-                            "content": json.loads(msg["content"]) if isinstance(msg["content"], str) else msg["content"],
-                        },
-                    }
-                }],
-            })
-            continue
+            gemini_role = "function"
         else:
             gemini_role = "user"
 
         parts = []
-        if msg.get("content"):
-            parts.append({"text": msg["content"]})
 
-        # Handle tool calls from assistant
-        if role == "assistant" and msg.get("tool_calls"):
-            for tc in msg["tool_calls"]:
-                raw_args = tc.get("arguments", {})
-                if isinstance(raw_args, str):
-                    try:
-                        raw_args = json.loads(raw_args)
-                    except json.JSONDecodeError:
-                        raw_args = {}
+        if gemini_role == "function":
+            try:
+                response_data = json.loads(msg["content"]) if isinstance(msg["content"], str) else msg["content"]
+            except Exception:
+                response_data = msg.get("content", "")
+            parts.append({
+                "functionResponse": {
+                    "name": msg.get("name", ""),
+                    "response": {
+                        "content": response_data,
+                    },
+                }
+            })
+        else:
+            content = msg.get("content")
+            if isinstance(content, list):
+                for block in content:
+                    if block.get("type") == "text":
+                        parts.append({"text": block.get("text", "")})
+                    elif block.get("type") == "image_url":
+                        img_url = block.get("image_url", {}).get("url")
+                        if img_url:
+                            try:
+                                # Attach the Meta token header if the URL belongs to Meta/Facebook CDN
+                                headers = {}
+                                if "lookaside.fbsbx.com" in img_url or "graph.facebook.com" in img_url:
+                                    headers["Authorization"] = f"Bearer {settings.META_WHATSAPP_TOKEN}"
+                                
+                                async with httpx.AsyncClient(timeout=15.0) as client:
+                                    img_resp = await client.get(img_url, headers=headers)
+                                if img_resp.status_code == 200:
+                                    import base64
+                                    img_base64 = base64.b64encode(img_resp.content).decode("utf-8")
+                                    mime_type = img_resp.headers.get("content-type", "image/jpeg")
+                                    mime_type = mime_type.split(";")[0].strip()
+                                    parts.append({
+                                        "inlineData": {
+                                            "mimeType": mime_type,
+                                            "data": img_base64
+                                        }
+                                    })
+                                else:
+                                    logger.error(f"Failed to download image {img_url}, status code: {img_resp.status_code}")
+                            except Exception as e:
+                                logger.error(f"Exception downloading image {img_url}: {e}")
+            elif content:
+                parts.append({"text": content})
 
-                parts.append({
-                    "functionCall": {
-                        "name": tc.get("name", ""),
-                        "args": raw_args,
+            # Handle tool calls from assistant
+            if role == "assistant" and msg.get("tool_calls"):
+                for tc in msg["tool_calls"]:
+                    raw_args = tc.get("arguments", {})
+                    if isinstance(raw_args, str):
+                        try:
+                            raw_args = json.loads(raw_args)
+                        except json.JSONDecodeError:
+                            raw_args = {}
+
+                    part = {
+                        "functionCall": {
+                            "name": tc.get("name", ""),
+                            "args": raw_args,
+                        }
                     }
-                })
+                    if tc.get("thought_signature"):
+                        part["thoughtSignature"] = tc.get("thought_signature")
+                    parts.append(part)
 
         if parts:
-            contents.append({"role": gemini_role, "parts": parts})
+            if contents and contents[-1]["role"] == gemini_role:
+                contents[-1]["parts"].extend(parts)
+            else:
+                contents.append({"role": gemini_role, "parts": parts})
 
     # Convert tools to Gemini format
     gemini_tools = [{
@@ -709,6 +755,11 @@ async def _call_gemini_direct(messages: List[Dict]) -> Dict:
     }
     if system_instruction:
         body["systemInstruction"] = system_instruction
+
+    # Print for debugging
+    print("--- DEBUG GEMINI REQUEST BODY ---")
+    print(json.dumps(body, indent=2))
+    print("---------------------------------")
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(url, params=params, json=body)
@@ -734,11 +785,14 @@ async def _call_gemini_direct(messages: List[Dict]) -> Dict:
             text += part["text"]
         elif "functionCall" in part:
             fc = part["functionCall"]
-            tool_calls.append({
+            tool_call = {
                 "id": f"call_{fc['name']}",
                 "name": fc["name"],
                 "arguments": fc.get("args", {}),
-            })
+            }
+            if "thoughtSignature" in part:
+                tool_call["thought_signature"] = part["thoughtSignature"]
+            tool_calls.append(tool_call)
 
     return {
         "text": text,
@@ -797,7 +851,10 @@ async def _call_openai_compatible_direct(
     preview_msgs = []
     for m in formatted_messages:
         content = m.get("content") or ""
-        preview_content = content[:150] + "..." if len(content) > 150 else content
+        if isinstance(content, list):
+            preview_content = f"[Multimodal content blocks: {len(content)} items]"
+        else:
+            preview_content = content[:150] + "..." if len(content) > 150 else content
         preview_msgs.append({
             "role": m["role"],
             "content": preview_content,

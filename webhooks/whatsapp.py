@@ -136,12 +136,10 @@ async def _process_whatsapp_message(
 
     elif msg_type == "image":
         text = message.get("image", {}).get("caption", "")
-        if not text:
-            await whatsapp_api.send_text(
-                phone,
-                "Nice image! 📸 I can help you find products — just describe what you're looking for."
-            )
-            return
+        media_id = message.get("image", {}).get("id")
+        if media_id:
+            from messaging import whatsapp_api
+            image_url = await whatsapp_api.get_media_url(media_id)
 
     elif msg_type in ("audio", "video", "document", "sticker"):
         await whatsapp_api.send_text(
@@ -159,11 +157,11 @@ async def _process_whatsapp_message(
         )
         return
 
-    if not text:
+    if not text and not image_url:
         return
 
     # Process with AI
-    await _respond_to_user(phone, text, contact, message_id=msg_id)
+    await _respond_to_user(phone, text, contact, message_id=msg_id, image_url=image_url)
 
 
 # ── AI Response Flow ─────────────────────────────────────────────────────
@@ -174,6 +172,7 @@ async def _respond_to_user(
     user_text: str,
     contact: Optional[Dict] = None,
     message_id: str | None = None,
+    image_url: str | None = None,
 ) -> None:
     """
     Process user text through the AI agent and send the response via WhatsApp.
@@ -184,6 +183,14 @@ async def _respond_to_user(
         profile = contact.get("profile", {})
         user_name = profile.get("name")
 
+    # Format content to save: plain text or multimodal list
+    content_to_save = user_text
+    if image_url:
+        content_to_save = [
+            {"type": "text", "text": user_text or "Describe this image and search for matching products in the store catalog."},
+            {"type": "image_url", "image_url": {"url": image_url}}
+        ]
+
     # Deduplicate messages using message_id synchronously
     if message_id:
         from database import db
@@ -192,7 +199,7 @@ async def _respond_to_user(
                 platform="whatsapp",
                 user_id=phone,
                 role="user",
-                content=user_text,
+                content=content_to_save,
                 message_id=message_id,
                 name=user_name
             )
@@ -256,7 +263,7 @@ async def _respond_to_user(
         await whatsapp_api.send_text(phone, welcome)
 
     # Add user message to history
-    await session.add_message("user", user_text, message_id=message_id)
+    await session.add_message("user", content_to_save, message_id=message_id)
 
     # ── DOMAIN FILTERING ──────────────────────────────────────────────────────
     # Exclusively respond to roles based on global reply domain (1 = Admin, 2 = Admin/Tester, 3 = All)
@@ -302,15 +309,36 @@ async def _respond_to_user(
         )
 
         if response_text:
+            # Extract any [IMAGE: url] tags
+            import re
+            img_pattern = r'\[IMAGE:\s*(https?://[^\s\]]+)\]'
+            image_urls = re.findall(img_pattern, response_text)
+            response_text = re.sub(img_pattern, '', response_text).strip()
+            response_text = re.sub(r'\s+', ' ', response_text).strip()
+
+            assistant_content = response_text
+            if image_urls:
+                assistant_content = [
+                    {"type": "text", "text": response_text},
+                ] + [
+                    {"type": "image_url", "image_url": {"url": img_url}}
+                    for img_url in image_urls
+                ]
+
             # Add assistant response to history
-            await session.add_message("assistant", response_text)
+            await session.add_message("assistant", assistant_content)
 
             # Check for human handoff
             if "connecting you with a human" in response_text.lower():
                 await session.set_human_handoff(True)
 
             # Send the response (chunked if long)
-            await whatsapp_api.send_text_chunked(phone, response_text)
+            if response_text:
+                await whatsapp_api.send_text_chunked(phone, response_text)
+
+            # Send any extracted images
+            for img_url in image_urls:
+                await whatsapp_api.send_image(phone, img_url)
 
     except Exception as e:
         logger.error(f"Error processing WhatsApp message from {phone}: {e}")

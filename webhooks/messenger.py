@@ -124,18 +124,18 @@ async def _handle_message(sender_id: str, message: Dict) -> None:
     if quick_reply_payload:
         text = quick_reply_payload
 
-    if not text:
-        # Handle non-text messages (images, stickers, etc.)
-        attachments = message.get("attachments", [])
-        if attachments:
-            await messenger_api.send_text(
-                sender_id,
-                "Thanks for sharing! I can help you find products — just describe what you're looking for. 😊"
-            )
+    attachments = message.get("attachments", [])
+    image_url = None
+    for attach in attachments:
+        if attach.get("type") == "image":
+            image_url = attach.get("payload", {}).get("url")
+            break
+
+    if not text and not image_url:
         return
 
     # Process the message with AI
-    await _respond_to_user(sender_id, text, message_id=message.get("mid"))
+    await _respond_to_user(sender_id, text, message_id=message.get("mid"), image_url=image_url)
 
 
 async def _handle_postback(sender_id: str, postback: Dict) -> None:
@@ -182,7 +182,12 @@ async def _handle_postback(sender_id: str, postback: Dict) -> None:
 # ── AI Response Flow ─────────────────────────────────────────────────────
 
 
-async def _respond_to_user(sender_id: str, user_text: str, message_id: str | None = None) -> None:
+async def _respond_to_user(
+    sender_id: str,
+    user_text: str,
+    message_id: str | None = None,
+    image_url: str | None = None,
+) -> None:
     """
     Process user text through the AI agent and send the response.
     """
@@ -209,6 +214,14 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
         except Exception as e:
             logger.warning(f"Failed to fetch profile for {sender_id}: {e}")
 
+    # Format content to save: plain text or multimodal list
+    content_to_save = user_text
+    if image_url:
+        content_to_save = [
+            {"type": "text", "text": user_text or "Describe this image and search for matching products in the store catalog."},
+            {"type": "image_url", "image_url": {"url": image_url}}
+        ]
+
     # Deduplicate messages using message_id synchronously
     if message_id:
         from database import db
@@ -217,7 +230,7 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
                 platform="messenger",
                 user_id=sender_id,
                 role="user",
-                content=user_text,
+                content=content_to_save,
                 message_id=message_id,
                 name=full_name
             )
@@ -252,7 +265,7 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
         asyncio.create_task(_track_user_background())
 
     # Add user message to history
-    await session.add_message("user", user_text, message_id=message_id)
+    await session.add_message("user", content_to_save, message_id=message_id)
 
     # ── DOMAIN FILTERING ──────────────────────────────────────────────────────
     # Exclusively respond to roles based on global reply domain (1 = Admin, 2 = Admin/Tester, 3 = All)
@@ -320,8 +333,24 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
         )
 
         if response_text:
+            # Extract any [IMAGE: url] tags
+            import re
+            img_pattern = r'\[IMAGE:\s*(https?://[^\s\]]+)\]'
+            image_urls = re.findall(img_pattern, response_text)
+            response_text = re.sub(img_pattern, '', response_text).strip()
+            response_text = re.sub(r'\s+', ' ', response_text).strip()
+
+            assistant_content = response_text
+            if image_urls:
+                assistant_content = [
+                    {"type": "text", "text": response_text},
+                ] + [
+                    {"type": "image_url", "image_url": {"url": img_url}}
+                    for img_url in image_urls
+                ]
+
             # Add assistant response to history
-            await session.add_message("assistant", response_text)
+            await session.add_message("assistant", assistant_content)
 
             # Persist last responded message ID to Supabase for Vercel deduplication
             if message_id:
@@ -336,7 +365,12 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
 
             # Send the response (chunked if long)
             await messenger_api.send_typing_off(sender_id)
-            await messenger_api.send_text_chunked(sender_id, response_text)
+            if response_text:
+                await messenger_api.send_text_chunked(sender_id, response_text)
+            
+            # Send any extracted images
+            for img_url in image_urls:
+                await messenger_api.send_image(sender_id, img_url)
         else:
             await messenger_api.send_typing_off(sender_id)
 

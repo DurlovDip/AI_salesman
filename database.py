@@ -119,28 +119,29 @@ class SupabaseDB:
         # Check if the incoming values differ from cached values to avoid redundant DB calls
         if user_key in self._user_cache:
             cached_user, ts = self._user_cache[user_key]
-            is_different = False
-            if name is not None and cached_user.get("name") != name:
-                is_different = True
-            if phone is not None and cached_user.get("phone") != phone:
-                is_different = True
-            if address is not None and cached_user.get("address") != address:
-                is_different = True
-            if lead_type is not None and cached_user.get("lead_type") != lead_type:
-                is_different = True
-            if human_handoff is not None and cached_user.get("human_handoff") != human_handoff:
-                is_different = True
-            if role is not None and cached_user.get("role") != role:
-                is_different = True
-            if metadata is not None:
-                cached_meta = cached_user.get("metadata") or {}
-                for k, v in metadata.items():
-                    if cached_meta.get(k) != v:
-                        is_different = True
-                        break
-            
-            if not is_different:
-                return cached_user
+            if cached_user is not None:
+                is_different = False
+                if name is not None and cached_user.get("name") != name:
+                    is_different = True
+                if phone is not None and cached_user.get("phone") != phone:
+                    is_different = True
+                if address is not None and cached_user.get("address") != address:
+                    is_different = True
+                if lead_type is not None and cached_user.get("lead_type") != lead_type:
+                    is_different = True
+                if human_handoff is not None and cached_user.get("human_handoff") != human_handoff:
+                    is_different = True
+                if role is not None and cached_user.get("role") != role:
+                    is_different = True
+                if metadata is not None:
+                    cached_meta = cached_user.get("metadata") or {}
+                    for k, v in metadata.items():
+                        if cached_meta.get(k) != v:
+                            is_different = True
+                            break
+                
+                if not is_different:
+                    return cached_user
 
         # Build updates payload
         data: Dict[str, Any] = {
@@ -290,10 +291,19 @@ class SupabaseDB:
         # Ensure user exists first
         await self.create_or_update_user(platform, user_id)
 
+        # Serialize non-string content (e.g. lists of multimodal content blocks) to JSON string for the DB text column
+        import json
+        serialized_content = content
+        if content is not None and not isinstance(content, str):
+            try:
+                serialized_content = json.dumps(content)
+            except Exception as e:
+                logger.error(f"Failed to serialize structured content: {e}")
+
         data = {
             "user_id": user_key,
             "role": role,
-            "content": content,
+            "content": serialized_content,
             "name": name,
             "tool_calls": tool_calls,
             "tool_call_id": tool_call_id,
@@ -444,10 +454,17 @@ class SupabaseDB:
                 data.reverse()
                 # Clean up metadata fields to fit Chat API expected roles
                 formatted = []
+                import json
                 for msg in data:
+                    content = msg["content"]
+                    if content and isinstance(content, str) and (content.startswith("[") or content.startswith("{")):
+                        try:
+                            content = json.loads(content)
+                        except Exception:
+                            pass
                     cleaned = {
                         "role": msg["role"],
-                        "content": msg["content"],
+                        "content": content,
                     }
                     if msg.get("name"):
                         cleaned["name"] = msg["name"]

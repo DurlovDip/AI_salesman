@@ -285,3 +285,27 @@ async def mark_read(message_id: str) -> Dict:
         response = await client.post(url, headers=headers, json=payload)
 
     return response.json()
+
+
+# ── Media Retrieval ──────────────────────────────────────────────────────
+
+
+async def get_media_url(media_id: str) -> Optional[str]:
+    """Retrieve temporary download URL for WhatsApp media ID."""
+    url = f"{GRAPH_API}/{media_id}"
+    headers = {
+        "Authorization": f"Bearer {settings.META_WHATSAPP_TOKEN}",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(url, headers=headers)
+        if response.status_code == 200:
+            return response.json().get("url")
+        else:
+            logger.error(f"WhatsApp Media URL resolution error: {response.text}")
+            return None
+    except Exception as e:
+        logger.error(f"Failed to resolve WhatsApp media ID {media_id}: {e}")
+        return None
+
