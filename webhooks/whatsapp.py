@@ -251,6 +251,20 @@ async def _respond_to_user(
     # Add user message to history
     await session.add_message("user", user_text, message_id=message_id)
 
+    # ── DOMAIN FILTERING ──────────────────────────────────────────────────────
+    # Exclusively respond to roles based on global reply domain (1 = Admin, 2 = Admin/Tester, 3 = All)
+    from database import db
+    reply_domain = await db.get_reply_domain()
+    user_role = session.metadata.get("role", "Customer")
+    if reply_domain == "1":
+        if user_role != "Admin":
+            logger.info(f"🚫 Ignoring WhatsApp message from {phone} because domain is set to Admin only.")
+            return
+    elif reply_domain == "2":
+        if user_role not in ("Admin", "Tester"):
+            logger.info(f"🚫 Ignoring WhatsApp message from {phone} because domain is set to Admin+Tester only.")
+            return
+
     # ── TESTER COMMAND INTERCEPTION ───────────────────────────────────────────
     from tester_commands import handle_tester_command
     was_handled, confirmation_reply = await handle_tester_command(

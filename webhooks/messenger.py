@@ -247,6 +247,20 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
     # Add user message to history
     await session.add_message("user", user_text, message_id=message_id)
 
+    # ── DOMAIN FILTERING ──────────────────────────────────────────────────────
+    # Exclusively respond to roles based on global reply domain (1 = Admin, 2 = Admin/Tester, 3 = All)
+    from database import db
+    reply_domain = await db.get_reply_domain()
+    user_role = session.metadata.get("role", "Customer")
+    if reply_domain == "1":
+        if user_role != "Admin":
+            logger.info(f"🚫 Ignoring message from {full_name} ({sender_id}) because domain is set to Admin only.")
+            return
+    elif reply_domain == "2":
+        if user_role not in ("Admin", "Tester"):
+            logger.info(f"🚫 Ignoring message from {full_name} ({sender_id}) because domain is set to Admin+Tester only.")
+            return
+
     # ── TESTER COMMAND INTERCEPTION ───────────────────────────────────────────
     # If the user is a Tester and sends a @testing command, handle it here
     # instead of sending to the AI agent.

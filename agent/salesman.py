@@ -440,6 +440,15 @@ async def get_ai_response(
                     f"Write your response in clean plain text without markdown formatting symbols."
                 )
                 system_prompt += testing_instruction
+
+            elif current_mode == "setdomain":
+                setdomain_instruction = (
+                    f"\n\n## ACTIVE MODE: SETDOMAIN MODE\n"
+                    f"You are currently in setdomain mode. The customer (Admin) is configuring the global reply domain filter (1=Admin, 2=Admin+Tester, 3=All).\n"
+                    f"If the setting was completed successfully (e.g. they provided a valid value 1, 2, or 3), you MUST output the termination command `@domaindone` followed by a newline (\\n) and then confirmation text (e.g., \"@domaindone\\nDomain setting has been updated.\").\n"
+                    f"Write your response in clean plain text without markdown formatting symbols."
+                )
+                system_prompt += setdomain_instruction
     except Exception as e:
         logger.error(f"Error checking active mode for system prompt: {e}")
 

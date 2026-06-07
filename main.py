@@ -97,10 +97,15 @@ async def _poll_facebook_loop() -> None:
 
                 session = await conversation_manager.get_or_create("messenger", p_id)
 
-                # Exclusively respond to Admin and Tester roles during testing
+                # Exclusively respond to roles based on global reply domain (1 = Admin, 2 = Admin/Tester, 3 = All)
+                reply_domain = await db.get_reply_domain()
                 user_role = session.metadata.get("role", "Customer")
-                if user_role not in ("Admin", "Tester"):
-                    continue
+                if reply_domain == "1":
+                    if user_role != "Admin":
+                        continue
+                elif reply_domain == "2":
+                    if user_role not in ("Admin", "Tester"):
+                        continue
                 if session.is_processing:
                     continue
 

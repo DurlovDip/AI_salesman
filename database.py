@@ -831,6 +831,24 @@ class SupabaseDB:
             logger.error(f"Error querying command_modes from Supabase: {e}")
             return []
 
+    async def get_reply_domain(self) -> str:
+        """Retrieve the global reply domain setting (1 = Admin, 2 = Admin/Tester, 3 = All)."""
+        contexts = await self.get_global_contexts()
+        for ctx in contexts:
+            if ctx.get("context_name") == "reply_domain":
+                return ctx.get("text", "2").strip()
+        return "2"  # Default fallback
+
+    async def save_reply_domain(self, value: str) -> None:
+        """Save the global reply domain setting."""
+        await self.save_global_context(
+            name="reply_domain",
+            text=str(value).strip(),
+            description="Global reply domain control setting (1=Admin, 2=Admin+Tester, 3=All)",
+            context_type="special",
+            is_active=False
+        )
+
 
 # Global singleton database instance
 db = SupabaseDB()
