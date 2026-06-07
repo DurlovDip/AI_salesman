@@ -56,7 +56,7 @@ class TestingModeHandler(BaseCommandHandler):
                 session.metadata["mode_state"]["awaiting"] = None
 
             # Check terminator
-            if cmd_name == "test_terminate":
+            if cmd_name in ("test_terminate", "test_termination"):
                 session.metadata.pop("current_mode", None)
                 session.metadata.pop("mode_state", None)
                 if db.is_configured():
@@ -107,7 +107,7 @@ class TestingModeHandler(BaseCommandHandler):
                 from main import compile_and_save_active_guidelines
                 await compile_and_save_active_guidelines()
 
-                return True, "Context is added & thanks for making me better"
+                return True, "@test_terminate\nContext is added & thanks for making me better"
             except Exception as e:
                 logger.error(f"Failed to save context from tester command: {e}")
                 return True, f"Failed to add context '{title}'. Error: {str(e)}. Type @testing to try again."

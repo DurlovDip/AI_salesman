@@ -16,6 +16,7 @@ _registry = {
     "type": TestingModeHandler(),
     "end": TestingModeHandler(),
     "test_terminate": TestingModeHandler(),
+    "test_termination": TestingModeHandler(),
     "doc": _doc_handler,
     "doc_response": _doc_handler,
     "doc_terminate": _doc_handler,
