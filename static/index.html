@@ -1578,7 +1578,35 @@
                 }
 
                 // Check for attachments/links inside content and render nicely
-                let displayContent = formatMessageText(content);
+                let displayContent = '';
+                if (Array.isArray(content)) {
+                    let textParts = [];
+                    let imgParts = [];
+                    content.forEach(part => {
+                        if (part.type === 'text') {
+                            textParts.push(part.text || '');
+                        } else if (part.type === 'image_url') {
+                            const url = part.image_url ? part.image_url.url : '';
+                            if (url) {
+                                imgParts.push(`<img src="${url}" style="max-width: 250px; border-radius: 8px; margin-top: 8px; display: block; cursor: pointer;" onclick="window.open('${url}', '_blank')" />`);
+                            }
+                        }
+                    });
+                    displayContent = formatMessageText(textParts.join('\n')) + imgParts.join('');
+                } else if (typeof content === 'object' && content !== null) {
+                    if (content.type === 'text') {
+                        displayContent = formatMessageText(content.text || '');
+                    } else if (content.type === 'image_url') {
+                        const url = content.image_url ? content.image_url.url : '';
+                        if (url) {
+                            displayContent = `<img src="${url}" style="max-width: 250px; border-radius: 8px; margin-top: 8px; display: block; cursor: pointer;" onclick="window.open('${url}', '_blank')" />`;
+                        }
+                    } else {
+                        displayContent = formatMessageText(JSON.stringify(content));
+                    }
+                } else {
+                    displayContent = formatMessageText(content);
+                }
 
                 // Handle mock attachment render (if any tool result or metadata contains details)
                 let attachmentsHtml = '';
@@ -1638,6 +1666,9 @@
         }
 
         function formatMessageText(text) {
+            if (typeof text !== 'string') {
+                text = String(text || '');
+            }
             // Replace newlines with <br>
             let formatted = text.replace(/\n/g, '<br>');
             // Bold markup **text** -> <strong>text</strong>
