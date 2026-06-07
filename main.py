@@ -118,9 +118,9 @@ async def _poll_facebook_loop() -> None:
 
                 # Fetch message history to see if the last message is from the user
                 conv_id = item.get("id")
-                msg_url = f"https://graph.facebook.com/v21.0/{conv_id}"
+                msg_url = f"https://graph.facebook.com/v25.0/{conv_id}"
                 msg_params = {
-                    "fields": "messages.limit(10){message,from,created_time}",
+                    "fields": "messages.limit(10){message,from,created_time,attachments}",
                     "access_token": access_token
                 }
                 async with httpx.AsyncClient(timeout=10.0) as client2:
@@ -154,16 +154,46 @@ async def _poll_facebook_loop() -> None:
                         f_id = msg.get("from", {}).get("id")
                         m_text = msg.get("message", "")
                         m_id = msg.get("id")
-                        if not m_text:
+                        
+                        # Parse attachments if any
+                        attachments = msg.get("attachments", {}).get("data", [])
+                        image_url = None
+                        for attach in attachments:
+                            mime_type = attach.get("mime_type", "")
+                            if "image" in mime_type or attach.get("image_data"):
+                                image_url = attach.get("image_data", {}).get("url")
+                                if not image_url:
+                                    image_url = attach.get("payload", {}).get("url")
+                                break
+                                
+                        if not m_text and not image_url:
                             continue
-                        if f_id == page_id:
-                            await session.add_message("assistant", m_text, message_id=m_id)
+                            
+                        # Format content
+                        if image_url:
+                            m_content = [
+                                {"type": "text", "text": m_text or "Describe this image and search for matching products in the store catalog."},
+                                {"type": "image_url", "image_url": {"url": image_url}}
+                            ]
                         else:
-                            await session.add_message("user", m_text, message_id=m_id)
+                            m_content = m_text
+                            
+                        if f_id == page_id:
+                            await session.add_message("assistant", m_content, message_id=m_id)
+                        else:
+                            await session.add_message("user", m_content, message_id=m_id)
 
                     # Verify if the last message is still a 'user' message after sync
                     if session.messages and session.messages[-1]["role"] == "user":
-                        user_text = session.messages[-1]["content"]
+                        last_msg_content = session.messages[-1]["content"]
+                        user_text = last_msg_content
+                        if isinstance(last_msg_content, list):
+                            # Extract text block for tester command fuzzy logic if needed
+                            user_text = ""
+                            for block in last_msg_content:
+                                if block.get("type") == "text":
+                                    user_text = block.get("text", "")
+                                    break
                         logger.info(f"🔄 Polling detected new message from Dip Durlov: '{user_text}'. Triggering AI...")
 
                         session.is_processing = True
@@ -195,15 +225,34 @@ async def _poll_facebook_loop() -> None:
                                 user_id=p_id,
                             )
 
-                            # Send response to Facebook
-                            await messenger_api.send_text_chunked(p_id, response_text)
+                            if response_text:
+                                # Extract any [IMAGE: url] tags
+                                import re
+                                img_pattern = r'\[IMAGE:\s*(https?://[^\s\]]+)\]'
+                                image_urls = re.findall(img_pattern, response_text)
+                                cleaned_response_text = re.sub(img_pattern, '', response_text).strip()
+                                cleaned_response_text = re.sub(r'[ \t]+', ' ', cleaned_response_text).strip()
 
-                            # Mark this message ID as responded
-                            session.metadata["last_responded_msg_id"] = last_fb_msg_id
+                                assistant_content = cleaned_response_text
+                                if image_urls:
+                                    assistant_content = [
+                                        {"type": "text", "text": cleaned_response_text},
+                                    ] + [
+                                        {"type": "image_url", "image_url": {"url": img_url}}
+                                        for img_url in image_urls
+                                    ]
 
-                            # Add to session
-                            await session.add_message("assistant", response_text)
-                            logger.info(f"✅ Polling sent AI reply to Dip Durlov: '{response_text}'")
+                                # Send response to Facebook
+                                await messenger_api.send_text_chunked(p_id, cleaned_response_text)
+                                for img_url in image_urls:
+                                    await messenger_api.send_image(p_id, img_url)
+
+                                # Mark this message ID as responded
+                                session.metadata["last_responded_msg_id"] = last_fb_msg_id
+
+                                # Add to session
+                                await session.add_message("assistant", assistant_content)
+                                logger.info(f"✅ Polling sent AI reply to Dip Durlov: '{cleaned_response_text}'")
                         except Exception as poll_err:
                             logger.error(f"Error generating or sending polling response: {poll_err}")
                         finally:
@@ -762,9 +811,9 @@ async def api_facebook_conversations():
         try:
             page_id = settings.META_PAGE_ID
             access_token = settings.META_PAGE_ACCESS_TOKEN
-            url = f"https://graph.facebook.com/v21.0/{page_id}/conversations"
+            url = f"https://graph.facebook.com/v25.0/{page_id}/conversations"
             params = {
-                "fields": "id,participants,updated_time,unread_count,messages.limit(1){message}",
+                "fields": "id,participants,updated_time,unread_count,messages.limit(1){message,attachments}",
                 "access_token": access_token
             }
             async with httpx.AsyncClient(timeout=10.0) as client:
@@ -783,7 +832,15 @@ async def api_facebook_conversations():
                         p_id = p_info.get("id", "unknown")
 
                     last_msg_list = item.get("messages", {}).get("data", [])
-                    last_text = last_msg_list[0].get("message") if last_msg_list else "No message text"
+                    last_text = "No message text"
+                    if last_msg_list:
+                        m = last_msg_list[0]
+                        last_text = m.get("message", "")
+                        if not last_text:
+                            # Check if the last message was an image attachment
+                            attachments = m.get("attachments", {}).get("data", [])
+                            if attachments:
+                                last_text = "[Image Attachment]"
 
                     # Track user in Supabase immediately
                     if p_id != "unknown":
@@ -854,8 +911,8 @@ async def fetch_paginated_messages(conversation_id: str, access_token: str, limi
     # Use v25.0 since it is current and has deprecated v21.0
     url = f"https://graph.facebook.com/v25.0/{conversation_id}/messages"
     params = {
-        "fields": "id,message,from,created_time",
-        "limit": 50,
+        "fields": "id,message,from,created_time,attachments",
+        "limit": min(limit, 50),
         "access_token": access_token
     }
 
@@ -927,13 +984,34 @@ async def api_facebook_messages(
                 from_id = msg.get("from", {}).get("id")
                 text = msg.get("message", "")
                 msg_id = msg.get("id")
-                if not text:
+                
+                # Check for attachments
+                attachments = msg.get("attachments", {}).get("data", [])
+                image_url = None
+                for attach in attachments:
+                    mime_type = attach.get("mime_type", "")
+                    if "image" in mime_type or attach.get("image_data"):
+                        image_url = attach.get("image_data", {}).get("url")
+                        if not image_url:
+                            image_url = attach.get("payload", {}).get("url")
+                        break
+                        
+                if not text and not image_url:
                     continue
+
+                if image_url:
+                    content = [
+                        {"type": "text", "text": text or "Describe this image and search for matching products in the store catalog."},
+                        {"type": "image_url", "image_url": {"url": image_url}}
+                    ]
+                else:
+                    content = text
+
                 if from_id == page_id:
-                    await session.add_message("assistant", text, message_id=msg_id)
+                    await session.add_message("assistant", content, message_id=msg_id)
                     session.messages[-1]["sender_type"] = "human"
                 else:
-                    await session.add_message("user", text, message_id=msg_id)
+                    await session.add_message("user", content, message_id=msg_id)
 
             logger.info(f"✅ Synced {len(session.messages)} messages for {user_id} from Meta Graph API")
         except Exception as e:
