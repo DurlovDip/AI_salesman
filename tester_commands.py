@@ -274,6 +274,6 @@ async def handle_ai_response_commands(platform: str, user_id: str, text: str) ->
         # 2. Strip the command token and its trailing newline/whitespace from the final output text
         pattern = re.escape(word) + r'\s*'
         cleaned_text = re.sub(pattern, '', cleaned_text, count=1).strip()
-        cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
+        cleaned_text = re.sub(r'[ \t]+', ' ', cleaned_text).strip()
 
     return cleaned_text

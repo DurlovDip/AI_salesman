@@ -27,6 +27,10 @@ from agent.tool_executor import execute_tool
 logger = logging.getLogger(__name__)
 
 
+# In-memory cache for downloaded images mapping URL -> (mime_type, base64_data)
+_downloaded_images_cache: Dict[str, Tuple[str, str]] = {}
+
+
 # ── System Prompt ────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = f"""You are the AI Sales Assistant for {settings.STORE_NAME}, a trendy online fashion store based in Bangladesh.
@@ -62,8 +66,13 @@ You can help customers with:
 - If the customer seems frustrated or the issue is complex, offer human_handoff.
 
 ## Image Handling and Visual Search
-1. **Analyzing Incoming Images**: If the user shares an image (a photo of a shirt, dress, style reference, etc.), you will receive it along with their message. Analyze the image to describe the garment (type, style, color, pattern, material). Immediately invoke `search_products` using those keywords to find matching items from our store catalog. Explain what you see in the photo and present the matched items.
-2. **Sending Product Images**: When listing or recommending a product, if the tool returns a valid image URL for that product (e.g., in the product's `"image"` field), append `[IMAGE: image_url]` immediately after the product's description or link. Keep this formatting tag exactly as specified so the messaging channel can intercept and deliver it as an image attachment.
+1. **Analyzing Incoming Images**: When the customer shares an image (a photo of a shirt, dress, style reference, etc.), you MUST first carefully examine the image using your visual capabilities. You MUST describe the image to the customer in detail (e.g. style, color, pattern, garment type, fabric, neckline, sleeves, fit).
+2. **Generating Search Keywords**: Generate simple, standard search keywords based on your visual description of the garment. Do NOT perform overly complex searches (e.g. use simple descriptive keywords like "white shirt", "black polo", "cotton hoodie").
+3. **Database Product Search**: Immediately call the `search_products` tool using those standard search keywords to find similar products in our store database. You MUST limit yourself to at most 2 search attempts. If you do not find a perfect match after 1 or 2 search queries, stop searching and present the closest matching products from the results you already retrieved.
+4. **Final Response Structure**: In your final response back to the customer, you MUST:
+   - First, write a polite description of what you see in the photo (e.g., "I see a simple white casual crewneck t-shirt in the photo...").
+   - Second, present the matching product links and details returned from the catalog search. If products are found, append `[IMAGE: image_url]` tags to show the product images.
+5. **Sending Product Images**: When listing or recommending a product, if the tool returns a valid image URL for that product (e.g., in the product's `"image"` field), append `[IMAGE: image_url]` immediately after the product's description or link. Keep this formatting tag exactly as specified so the messaging channel can intercept and deliver it as an image attachment.
 
 ## Order Confirmation Flow
 When a customer wants to place or confirm an order:
@@ -329,7 +338,7 @@ TOOLS = [
 
 # ── AI Agent ─────────────────────────────────────────────────────────────
 
-MAX_TOOL_ROUNDS = 3  # Prevent infinite tool-call loops
+MAX_TOOL_ROUNDS = 5  # Prevent infinite tool-call loops
 
 
 async def get_ai_response(
@@ -464,7 +473,7 @@ async def get_ai_response(
         logger.info(f"AI round {round_num + 1} for {platform}:{user_id}")
 
         # Call the AI with tools
-        ai_result = await _call_ai_with_tools(full_messages)
+        ai_result = await _call_ai_with_tools(full_messages, platform=platform)
 
         if "error" in ai_result:
             logger.error(f"AI error: {ai_result['error']}")
@@ -535,7 +544,7 @@ def is_provider_on_cooldown(provider: str) -> bool:
     return time.time() < cooldown_until
 
 
-async def _call_ai_with_tools(messages: List[Dict]) -> Dict:
+async def _call_ai_with_tools(messages: List[Dict], platform: str = "messenger") -> Dict:
     """
     Call the AI providers with failover and cooldown support,
     defaulting to the primary provider if configured.
@@ -571,7 +580,7 @@ async def _call_ai_with_tools(messages: List[Dict]) -> Dict:
             if provider == "openai":
                 result = await _call_openai_direct(messages)
             elif provider == "gemini":
-                result = await _call_gemini_direct(messages)
+                result = await _call_gemini_direct(messages, platform=platform)
             elif provider == "groq":
                 result = await _call_groq_direct(messages)
             elif provider == "multi-ai":
@@ -631,7 +640,7 @@ async def _call_multi_ai(messages: List[Dict]) -> Dict:
     }
 
 
-async def _call_gemini_direct(messages: List[Dict]) -> Dict:
+async def _call_gemini_direct(messages: List[Dict], platform: str = "messenger") -> Dict:
     """
     Fallback: call Gemini API directly with function calling.
     Uses the google-generativeai REST API.
@@ -681,29 +690,40 @@ async def _call_gemini_direct(messages: List[Dict]) -> Dict:
                     elif block.get("type") == "image_url":
                         img_url = block.get("image_url", {}).get("url")
                         if img_url:
-                            try:
-                                # Attach the Meta token header if the URL belongs to Meta/Facebook CDN
-                                headers = {}
-                                if "lookaside.fbsbx.com" in img_url or "graph.facebook.com" in img_url:
-                                    headers["Authorization"] = f"Bearer {settings.META_WHATSAPP_TOKEN}"
-                                
-                                async with httpx.AsyncClient(timeout=15.0) as client:
-                                    img_resp = await client.get(img_url, headers=headers)
-                                if img_resp.status_code == 200:
-                                    import base64
-                                    img_base64 = base64.b64encode(img_resp.content).decode("utf-8")
-                                    mime_type = img_resp.headers.get("content-type", "image/jpeg")
-                                    mime_type = mime_type.split(";")[0].strip()
-                                    parts.append({
-                                        "inlineData": {
-                                            "mimeType": mime_type,
-                                            "data": img_base64
-                                        }
-                                    })
-                                else:
-                                    logger.error(f"Failed to download image {img_url}, status code: {img_resp.status_code}")
-                            except Exception as e:
-                                logger.error(f"Exception downloading image {img_url}: {e}")
+                            if img_url in _downloaded_images_cache:
+                                mime_type, img_base64 = _downloaded_images_cache[img_url]
+                                parts.append({
+                                    "inlineData": {
+                                        "mimeType": mime_type,
+                                        "data": img_base64
+                                    }
+                                })
+                            else:
+                                try:
+                                    # Attach the Meta token header if the URL belongs to Meta/Facebook CDN
+                                    headers = {}
+                                    if any(domain in img_url for domain in ["lookaside.fbsbx.com", "graph.facebook.com", "fbcdn.net"]):
+                                        token = settings.META_WHATSAPP_TOKEN if platform == "whatsapp" else settings.META_PAGE_ACCESS_TOKEN
+                                        headers["Authorization"] = f"Bearer {token}"
+                                    
+                                    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                                        img_resp = await client.get(img_url, headers=headers)
+                                    if img_resp.status_code == 200:
+                                        import base64
+                                        img_base64 = base64.b64encode(img_resp.content).decode("utf-8")
+                                        mime_type = img_resp.headers.get("content-type", "image/jpeg")
+                                        mime_type = mime_type.split(";")[0].strip()
+                                        _downloaded_images_cache[img_url] = (mime_type, img_base64)
+                                        parts.append({
+                                            "inlineData": {
+                                                "mimeType": mime_type,
+                                                "data": img_base64
+                                            }
+                                        })
+                                    else:
+                                        logger.error(f"Failed to download image {img_url}, status code: {img_resp.status_code}")
+                                except Exception as e:
+                                    logger.error(f"Exception downloading image {img_url}: {e}")
             elif content:
                 parts.append({"text": content})
 
@@ -768,6 +788,11 @@ async def _call_gemini_direct(messages: List[Dict]) -> Dict:
         return {"error": f"Gemini API returned {response.status_code}: {response.text}"}
 
     data = response.json()
+
+    # Print response for debugging
+    print("--- DEBUG GEMINI RESPONSE BODY ---")
+    print(json.dumps(data, indent=2))
+    print("----------------------------------")
 
     # Parse Gemini response
     candidates = data.get("candidates", [])

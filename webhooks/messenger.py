@@ -338,7 +338,7 @@ async def _respond_to_user(
             img_pattern = r'\[IMAGE:\s*(https?://[^\s\]]+)\]'
             image_urls = re.findall(img_pattern, response_text)
             response_text = re.sub(img_pattern, '', response_text).strip()
-            response_text = re.sub(r'\s+', ' ', response_text).strip()
+            response_text = re.sub(r'[ \t]+', ' ', response_text).strip()
 
             assistant_content = response_text
             if image_urls:
