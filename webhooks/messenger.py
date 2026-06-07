@@ -218,7 +218,7 @@ async def _respond_to_user(
     content_to_save = user_text
     if image_url:
         content_to_save = [
-            {"type": "text", "text": user_text or "Describe this image and search for matching products in the store catalog."},
+            {"type": "text", "text": user_text or ""},
             {"type": "image_url", "image_url": {"url": image_url}}
         ]
 

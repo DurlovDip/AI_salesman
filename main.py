@@ -172,7 +172,7 @@ async def _poll_facebook_loop() -> None:
                         # Format content
                         if image_url:
                             m_content = [
-                                {"type": "text", "text": m_text or "Describe this image and search for matching products in the store catalog."},
+                                {"type": "text", "text": m_text or ""},
                                 {"type": "image_url", "image_url": {"url": image_url}}
                             ]
                         else:
@@ -1001,7 +1001,7 @@ async def api_facebook_messages(
 
                 if image_url:
                     content = [
-                        {"type": "text", "text": text or "Describe this image and search for matching products in the store catalog."},
+                        {"type": "text", "text": text or ""},
                         {"type": "image_url", "image_url": {"url": image_url}}
                     ]
                 else:
