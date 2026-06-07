@@ -427,7 +427,7 @@ async def get_ai_response(
                     f"Here are the available commands from the database:\n"
                     f"{commands_doc}\n\n"
                     f"CRITICAL RULES:\n"
-                    f"1. You must append the termination tag `@doc_response` in your response message so the system can terminate the mode (e.g. \"Here is the list of commands: ... @doc_response\").\n"
+                    f"1. You must output the termination tag `@doc_response` followed by a newline (\\n) and then your documentation text (e.g., \"@doc_response\\nHere is the list of commands:\").\n"
                     f"2. Write your response in clean plain text without markdown formatting symbols."
                 )
                 system_prompt += documentation_instruction
@@ -436,7 +436,7 @@ async def get_ai_response(
                 testing_instruction = (
                     f"\n\n## ACTIVE MODE: TESTING MODE\n"
                     f"You are currently in testing mode. The customer (Admin/Tester) may send a message containing `@end` to request terminating testing mode.\n"
-                    f"If the customer requested to end/terminate testing mode (e.g., they sent `@end`), you MUST acknowledge this and output the termination command `@test_terminate` (e.g., \"Ending testing mode now. @test_terminate\").\n"
+                    f"If the customer requested to end/terminate testing mode (e.g., they sent `@end`), you MUST acknowledge this and output the termination command `@test_terminate` followed by a newline (\\n) and then your confirmation text (e.g., \"@test_terminate\\nTesting mode has been terminated.\").\n"
                     f"Write your response in clean plain text without markdown formatting symbols."
                 )
                 system_prompt += testing_instruction

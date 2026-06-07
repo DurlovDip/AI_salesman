@@ -107,9 +107,9 @@ class TestingModeHandler(BaseCommandHandler):
                 from main import compile_and_save_active_guidelines
                 await compile_and_save_active_guidelines()
 
-                return True, "@confirmation\nContext is added & thanks for making me better"
+                return True, "Context is added & thanks for making me better"
             except Exception as e:
                 logger.error(f"Failed to save context from tester command: {e}")
-                return True, f"❌ Failed to add context '{title}'.\nError: {str(e)}\n\nType @testing to try again."
+                return True, f"Failed to add context '{title}'. Error: {str(e)}. Type @testing to try again."
 
         return False, None

@@ -145,6 +145,19 @@ async def handle_tester_command(
     # 3. Find any human commands in user message
     matches = await find_matching_commands(user_text, responder="Human")
     
+    # Check strict format for matches (newline is mandatory after command name if followed by arguments)
+    if matches:
+        for cmd, start, end, word in matches:
+            idx = matches.index((cmd, start, end, word))
+            next_start = matches[idx + 1][1] if idx + 1 < len(matches) else len(user_text)
+            trailing_text = user_text[end:next_start]
+            if trailing_text.strip():
+                # Extract characters between matched word and the first non-whitespace character in trailing_text
+                separator = trailing_text[:len(trailing_text) - len(trailing_text.lstrip())]
+                if "\n" not in separator:
+                    logger.warning(f"Command @{cmd['command']} failed strict newline structure validation.")
+                    return True, "Invalid command structure. Newline is mandatory after the command name."
+
     # Check if we are currently in an active mode for this user
     session = await conversation_manager.get_or_create(platform, user_id, user_name)
     current_mode = session.metadata.get("current_mode")
@@ -159,7 +172,7 @@ async def handle_tester_command(
             allowed_users = [u.lower() for u in cmd.get("command_user", [])]
             if user_role.lower() not in allowed_users:
                 logger.warning(f"User {user_id} with role {user_role} is unauthorized to run command @{cmd['command']}")
-                return True, f"⚠️ You are not authorized to use the @{cmd['command']} command."
+                return True, f"You are not authorized to use the @{cmd['command']} command."
 
     # Parse arguments
     args = extract_command_arguments(user_text, matches)
@@ -258,8 +271,9 @@ async def handle_ai_response_commands(platform: str, user_id: str, text: str) ->
                 user_role="AI"
             )
 
-        # 2. Strip the command token from the final output text
-        cleaned_text = cleaned_text.replace(word, "").strip()
+        # 2. Strip the command token and its trailing newline/whitespace from the final output text
+        pattern = re.escape(word) + r'\s*'
+        cleaned_text = re.sub(pattern, '', cleaned_text, count=1).strip()
         cleaned_text = re.sub(r'\s+', ' ', cleaned_text).strip()
 
     return cleaned_text
