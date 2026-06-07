@@ -97,6 +97,13 @@ async def _poll_facebook_loop() -> None:
 
                 session = await conversation_manager.get_or_create("messenger", p_id)
 
+                # Always fetch latest user role/profile from DB and sync with session metadata
+                if db.is_configured():
+                    user_data = await db.get_user("messenger", p_id)
+                    if user_data:
+                        user_role = user_data.get("role") or user_data.get("metadata", {}).get("role", "Customer")
+                        session.metadata["role"] = user_role
+
                 # Exclusively respond to roles based on global reply domain (1 = Admin, 2 = Admin/Tester, 3 = All)
                 reply_domain = await db.get_reply_domain()
                 user_role = session.metadata.get("role", "Customer")

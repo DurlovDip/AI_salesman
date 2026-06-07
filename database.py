@@ -73,7 +73,7 @@ class SupabaseDB:
         now = time.time()
         if user_key in self._user_cache:
             cached_user, ts = self._user_cache[user_key]
-            if now - ts < 300:  # 5 minutes cache
+            if now - ts < 10:  # 10 seconds cache to propagate role changes quickly
                 return cached_user
 
         client = get_supabase_client()

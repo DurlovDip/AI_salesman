@@ -228,8 +228,15 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
     session = await conversation_manager.get_or_create("messenger", sender_id, full_name)
     session.metadata["user_name"] = full_name
 
-    # Track user and increment message count in Supabase in background
+    # Always fetch latest user role/profile from DB and sync with session metadata
     from database import db
+    if db.is_configured():
+        user_data = await db.get_user("messenger", sender_id)
+        if user_data:
+            user_role = user_data.get("role") or user_data.get("metadata", {}).get("role", "Customer")
+            session.metadata["role"] = user_role
+
+    # Track user and increment message count in Supabase in background
     if db.is_configured():
         import asyncio
         async def _track_user_background():
@@ -249,7 +256,6 @@ async def _respond_to_user(sender_id: str, user_text: str, message_id: str | Non
 
     # ── DOMAIN FILTERING ──────────────────────────────────────────────────────
     # Exclusively respond to roles based on global reply domain (1 = Admin, 2 = Admin/Tester, 3 = All)
-    from database import db
     reply_domain = await db.get_reply_domain()
     user_role = session.metadata.get("role", "Customer")
     if reply_domain == "1":
