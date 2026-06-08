@@ -390,24 +390,24 @@ async def get_ai_response(
         from database import db
         contexts = await db.get_global_contexts()
         compiled_parts = []
-        
+
         # Sort contexts: universal first, then special so they append in a consistent, logical order
         sorted_contexts = sorted(
-            contexts, 
+            contexts,
             key=lambda c: 0 if c.get("context_type") == "universal" else 1
         )
-        
+
         for c in sorted_contexts:
             c_type = c.get("context_type", "special")
             is_act = c.get("is_active", False)
-            
+
             # Universal context is always active, special is active only if checked
             if c_type == "universal" or is_act:
                 header = f"# CONTEXT: {c.get('context_name')} ({c_type.upper()})"
                 text_body = c.get("text", "").strip()
                 if text_body:
                     compiled_parts.append(f"{header}\n\n{text_body}")
-                    
+
         if compiled_parts:
             custom_guidelines = "\n\n# ======================================================\n\n".join(compiled_parts)
             system_prompt += f"\n\n## Custom Guidelines / Context (Adhere to this strictly):\n{custom_guidelines}"
@@ -424,7 +424,7 @@ async def get_ai_response(
             logger.info(f"📚 Session active mode detected: {current_mode}")
             from database import db
             db_commands = await db.get_command_modes()
-            
+
             if current_mode == "documentation":
                 # List commands relevant to Admin or Tester
                 doc_lines = []
@@ -433,9 +433,9 @@ async def get_ai_response(
                     cmd_user = ", ".join(cmd.get("command_user", []))
                     comments = cmd.get("comments", "")
                     doc_lines.append(f"- `@{cmd_trigger}` (Allowed roles: {cmd_user}): {comments}")
-                
+
                 commands_doc = "\n".join(doc_lines)
-                
+
                 documentation_instruction = (
                     f"\n\n## ACTIVE MODE: DOCUMENTATION MODE\n"
                     f"You are currently in documentation mode. The customer has requested to see the documentation of all commands they can use.\n"
@@ -490,6 +490,9 @@ async def get_ai_response(
 
         if not tool_calls:
             # AI gave a final text response — we're done
+            if text:
+                from tester_commands import handle_ai_response_commands
+                text = await handle_ai_response_commands(platform, user_id, text)
             return text, messages
 
         # Execute each tool call
@@ -530,15 +533,18 @@ async def get_ai_response(
 
 
     # If we exhausted all rounds, return whatever text we have
-    return text or "I found some information. How else can I help you?", messages
+    final_text = text or "I found some information. How else can I help you?"
+    from tester_commands import handle_ai_response_commands
+    final_text = await handle_ai_response_commands(platform, user_id, final_text)
+    return final_text, messages
 
 
 provider_cooldowns: Dict[str, float] = {}
 
 def mark_provider_failed(provider: str) -> None:
     import time
-    logger.warning(f"⚠️ Provider '{provider}' marked as failed. Putting on cooldown for 5 minutes.")
-    provider_cooldowns[provider] = time.time() + 300
+    logger.warning(f"⚠️ Provider '{provider}' marked as failed. Putting on cooldown for 30 seconds.")
+    provider_cooldowns[provider] = time.time() + 30
 
 def is_provider_on_cooldown(provider: str) -> bool:
     import time
@@ -580,18 +586,22 @@ async def _call_ai_with_tools(messages: List[Dict], platform: str = "messenger")
         try:
             logger.info(f"🤖 Calling {provider} API directly...")
             if provider == "openai":
-                result = await _call_openai_direct(messages)
+                result = await _call_openai_direct(messages, platform=platform)
             elif provider == "gemini":
                 result = await _call_gemini_direct(messages, platform=platform)
             elif provider == "groq":
-                result = await _call_groq_direct(messages)
+                result = await _call_groq_direct(messages, platform=platform)
             elif provider == "multi-ai":
                 result = await _call_multi_ai(messages)
             else:
                 continue
 
             if "error" not in result:
-                return result
+                # Treat empty response (no text and no tool calls) as a failure to trigger failover
+                if not result.get("text", "").strip() and not result.get("tool_calls"):
+                    logger.warning(f"⚠️ Provider '{provider}' returned empty response. Triggering failover.")
+                else:
+                    return result
 
             # If it returned an error, mark as failed
             logger.warning(f"{provider} direct error: {result.get('error')}")
@@ -647,7 +657,7 @@ async def _call_gemini_direct(messages: List[Dict], platform: str = "messenger")
     Fallback: call Gemini API directly with function calling.
     Uses the google-generativeai REST API.
     """
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/{settings.GEMINI_MODEL}:generateContent"
     params = {"key": settings.GEMINI_API_KEY}
 
     # Convert to Gemini format
@@ -707,7 +717,7 @@ async def _call_gemini_direct(messages: List[Dict], platform: str = "messenger")
                                     if any(domain in img_url for domain in ["lookaside.fbsbx.com", "graph.facebook.com", "fbcdn.net"]):
                                         token = settings.META_WHATSAPP_TOKEN if platform == "whatsapp" else settings.META_PAGE_ACCESS_TOKEN
                                         headers["Authorization"] = f"Bearer {token}"
-                                    
+
                                     async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
                                         img_resp = await client.get(img_url, headers=headers)
                                     if img_resp.status_code == 200:
@@ -778,11 +788,6 @@ async def _call_gemini_direct(messages: List[Dict], platform: str = "messenger")
     if system_instruction:
         body["systemInstruction"] = system_instruction
 
-    # Print for debugging
-    print("--- DEBUG GEMINI REQUEST BODY ---")
-    print(json.dumps(body, indent=2))
-    print("---------------------------------")
-
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(url, params=params, json=body)
 
@@ -828,35 +833,70 @@ async def _call_gemini_direct(messages: List[Dict], platform: str = "messenger")
     }
 
 
-async def _call_openai_direct(messages: List[Dict]) -> Dict:
-    """Call OpenAI API directly."""
-    return await _call_openai_compatible_direct(
-        messages=messages,
-        api_key=settings.OPENAI_API_KEY,
-        base_url="https://api.openai.com/v1",
-        model="gpt-4o-mini"
-    )
-
-
-async def _call_groq_direct(messages: List[Dict]) -> Dict:
-    """Call Groq API directly."""
-    return await _call_openai_compatible_direct(
-        messages=messages,
-        api_key=settings.GROQ_API_KEY,
-        base_url="https://api.groq.com/openai/v1",
-        model="llama-3.3-70b-versatile"
-    )
-
-
-async def _call_openai_compatible_direct(
-    messages: List[Dict], api_key: str, base_url: str, model: str
-) -> Dict:
-    """Call an OpenAI-compatible API (like OpenAI or Groq) with function calling."""
-    formatted_messages = []
+async def _prepare_openai_messages(messages: List[Dict], platform: str = "messenger") -> List[Dict]:
+    """
+    Convert messages to OpenAI format, downloading protected images to base64
+    so OpenAI can actually read Facebook/WhatsApp CDN URLs that require auth.
+    """
+    formatted = []
     for msg in messages:
         m = {"role": msg["role"]}
-        if msg.get("content") is not None:
-            m["content"] = msg["content"]
+        content = msg.get("content")
+
+        if isinstance(content, list):
+            # Multimodal content — process each block
+            openai_parts = []
+            for block in content:
+                if block.get("type") == "text":
+                    openai_parts.append({"type": "text", "text": block.get("text", "")})
+                elif block.get("type") == "image_url":
+                    img_url = block.get("image_url", {}).get("url", "")
+                    if not img_url:
+                        continue
+
+                    # Try to get image as base64 (handles protected Meta CDN URLs)
+                    b64_data = None
+                    mime_type = "image/jpeg"
+
+                    if img_url in _downloaded_images_cache:
+                        mime_type, b64_data = _downloaded_images_cache[img_url]
+                    else:
+                        try:
+                            headers = {}
+                            if any(d in img_url for d in ["lookaside.fbsbx.com", "graph.facebook.com", "fbcdn.net", "cdninstagram.com"]):
+                                token = settings.META_WHATSAPP_TOKEN if platform == "whatsapp" else settings.META_PAGE_ACCESS_TOKEN
+                                headers["Authorization"] = f"Bearer {token}"
+
+                            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                                img_resp = await client.get(img_url, headers=headers)
+
+                            if img_resp.status_code == 200:
+                                import base64 as b64mod
+                                b64_data = b64mod.b64encode(img_resp.content).decode("utf-8")
+                                mime_type = img_resp.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+                                _downloaded_images_cache[img_url] = (mime_type, b64_data)
+                            else:
+                                logger.warning(f"Image download failed {img_resp.status_code} for {img_url}")
+                        except Exception as e:
+                            logger.error(f"Failed to download image for OpenAI: {e}")
+
+                    if b64_data:
+                        # Send as base64 data URL — works for protected CDN URLs
+                        openai_parts.append({
+                            "type": "image_url",
+                            "image_url": {"url": f"data:{mime_type};base64,{b64_data}", "detail": "low"}
+                        })
+                    else:
+                        # Fallback: try sending URL directly (may fail for protected URLs)
+                        openai_parts.append({
+                            "type": "image_url",
+                            "image_url": {"url": img_url, "detail": "low"}
+                        })
+
+            m["content"] = openai_parts if openai_parts else ""
+        else:
+            m["content"] = content
+
         if msg.get("tool_calls"):
             m["tool_calls"] = [
                 {
@@ -873,22 +913,49 @@ async def _call_openai_compatible_direct(
             m["tool_call_id"] = msg["tool_call_id"]
         if msg.get("name"):
             m["name"] = msg["name"]
-        formatted_messages.append(m)
 
-    preview_msgs = []
-    for m in formatted_messages:
-        content = m.get("content") or ""
-        if isinstance(content, list):
-            preview_content = f"[Multimodal content blocks: {len(content)} items]"
-        else:
-            preview_content = content[:150] + "..." if len(content) > 150 else content
-        preview_msgs.append({
-            "role": m["role"],
-            "content": preview_content,
-            "tool_calls": len(m.get("tool_calls", [])) if m.get("tool_calls") else 0,
-            "tool_call_id": m.get("tool_call_id")
-        })
-    logger.info(f"📤 OpenAI API call messages preview: {preview_msgs}")
+        formatted.append(m)
+    return formatted
+
+
+async def _call_openai_direct(messages: List[Dict], platform: str = "messenger", user_id: str = "") -> Dict:
+    """Call OpenAI API directly with vision support."""
+    return await _call_openai_compatible_direct(
+        messages=messages,
+        api_key=settings.OPENAI_API_KEY,
+        base_url="https://api.openai.com/v1",
+        model="gpt-4o-mini",
+        platform=platform,
+    )
+
+
+async def _call_groq_direct(messages: List[Dict], platform: str = "messenger", user_id: str = "") -> Dict:
+    """Call Groq API directly (text only — Groq doesn't support vision)."""
+    # Strip image blocks for Groq since it doesn't support vision
+    text_only_messages = []
+    for msg in messages:
+        m = dict(msg)
+        if isinstance(m.get("content"), list):
+            text = " ".join(
+                b.get("text", "") for b in m["content"] if b.get("type") == "text"
+            ).strip() or "[Customer sent an image]"
+            m["content"] = text
+        text_only_messages.append(m)
+
+    return await _call_openai_compatible_direct(
+        messages=text_only_messages,
+        api_key=settings.GROQ_API_KEY,
+        base_url="https://api.groq.com/openai/v1",
+        model="llama-3.3-70b-versatile",
+        platform=platform,
+    )
+
+
+async def _call_openai_compatible_direct(
+    messages: List[Dict], api_key: str, base_url: str, model: str, platform: str = "messenger"
+) -> Dict:
+    """Call an OpenAI-compatible API with function calling and vision support."""
+    formatted_messages = await _prepare_openai_messages(messages, platform=platform)
 
     payload = {
         "model": model,
@@ -898,27 +965,27 @@ async def _call_openai_compatible_direct(
         "temperature": 0.7,
         "max_tokens": 1024,
     }
-    
+
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(f"{base_url}/chat/completions", headers=headers, json=payload)
-            
+
         if response.status_code != 200:
             return {"error": f"OpenAI-compatible API returned {response.status_code}: {response.text}"}
-            
+
         data = response.json()
         choices = data.get("choices", [])
         if not choices:
             return {"error": "No choices returned by API"}
-            
+
         message = choices[0].get("message", {})
         text = message.get("content") or ""
-        
+
         tool_calls = []
         raw_tool_calls = message.get("tool_calls", [])
         for tc in raw_tool_calls:
@@ -934,7 +1001,7 @@ async def _call_openai_compatible_direct(
                 "name": func.get("name"),
                 "arguments": args
             })
-            
+
         return {
             "text": text,
             "tool_calls": tool_calls,
