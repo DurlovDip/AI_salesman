@@ -347,6 +347,7 @@ async def get_ai_response(
     messages: List[Dict],
     platform: str = "messenger",
     user_id: str = "",
+    use_tools: bool = True,
 ) -> Tuple[str, List[Dict]]:
     """
     Get an AI response with tool calling support.
@@ -474,8 +475,13 @@ async def get_ai_response(
     for round_num in range(MAX_TOOL_ROUNDS):
         logger.info(f"AI round {round_num + 1} for {platform}:{user_id}")
 
-        # Call the AI with tools
-        ai_result = await _call_ai_with_tools(full_messages, platform=platform)
+        # Call the AI with tools. Public comments pass use_tools=False so a
+        # Page comment cannot place an order or call catalog tools.
+        ai_result = await _call_ai_with_tools(
+            full_messages,
+            platform=platform,
+            use_tools=use_tools,
+        )
 
         if "error" in ai_result:
             logger.error(f"AI error: {ai_result['error']}")
@@ -488,9 +494,10 @@ async def get_ai_response(
         text = ai_result.get("text", "")
         tool_calls = ai_result.get("tool_calls", [])
 
-        if not tool_calls:
-            # AI gave a final text response — we're done
-            if text:
+        if not tool_calls or not use_tools:
+            # AI gave a final text response — we're done.
+            # Public Page comments must not run tester/admin command side effects.
+            if text and platform != "page_comment":
                 from tester_commands import handle_ai_response_commands
                 text = await handle_ai_response_commands(platform, user_id, text)
             return text, messages
@@ -534,8 +541,9 @@ async def get_ai_response(
 
     # If we exhausted all rounds, return whatever text we have
     final_text = text or "I found some information. How else can I help you?"
-    from tester_commands import handle_ai_response_commands
-    final_text = await handle_ai_response_commands(platform, user_id, final_text)
+    if platform != "page_comment":
+        from tester_commands import handle_ai_response_commands
+        final_text = await handle_ai_response_commands(platform, user_id, final_text)
     return final_text, messages
 
 
@@ -552,7 +560,11 @@ def is_provider_on_cooldown(provider: str) -> bool:
     return time.time() < cooldown_until
 
 
-async def _call_ai_with_tools(messages: List[Dict], platform: str = "messenger") -> Dict:
+async def _call_ai_with_tools(
+    messages: List[Dict],
+    platform: str = "messenger",
+    use_tools: bool = True,
+) -> Dict:
     """
     Call the AI providers with failover and cooldown support,
     defaulting to the primary provider if configured.
@@ -586,13 +598,13 @@ async def _call_ai_with_tools(messages: List[Dict], platform: str = "messenger")
         try:
             logger.info(f"🤖 Calling {provider} API directly...")
             if provider == "openai":
-                result = await _call_openai_direct(messages, platform=platform)
+                result = await _call_openai_direct(messages, platform=platform, use_tools=use_tools)
             elif provider == "gemini":
-                result = await _call_gemini_direct(messages, platform=platform)
+                result = await _call_gemini_direct(messages, platform=platform, use_tools=use_tools)
             elif provider == "groq":
-                result = await _call_groq_direct(messages, platform=platform)
+                result = await _call_groq_direct(messages, platform=platform, use_tools=use_tools)
             elif provider == "multi-ai":
-                result = await _call_multi_ai(messages)
+                result = await _call_multi_ai(messages, use_tools=use_tools)
             else:
                 continue
 
@@ -614,7 +626,7 @@ async def _call_ai_with_tools(messages: List[Dict], platform: str = "messenger")
     return {"error": "No AI provider available"}
 
 
-async def _call_multi_ai(messages: List[Dict]) -> Dict:
+async def _call_multi_ai(messages: List[Dict], use_tools: bool = True) -> Dict:
     """Call the Multi-AI Stable API /api/chat/tools endpoint."""
     url = f"{settings.MULTI_AI_API_URL}/api/chat/tools"
 
@@ -632,11 +644,12 @@ async def _call_multi_ai(messages: List[Dict]) -> Dict:
             m["name"] = msg["name"]
         api_messages.append(m)
 
-    payload = {
+    payload: Dict[str, Any] = {
         "messages": api_messages,
-        "tools": TOOLS,
         "options": {"temperature": 0.7, "max_tokens": 1024},
     }
+    if use_tools:
+        payload["tools"] = TOOLS
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(url, json=payload)
@@ -652,7 +665,11 @@ async def _call_multi_ai(messages: List[Dict]) -> Dict:
     }
 
 
-async def _call_gemini_direct(messages: List[Dict], platform: str = "messenger") -> Dict:
+async def _call_gemini_direct(
+    messages: List[Dict],
+    platform: str = "messenger",
+    use_tools: bool = True,
+) -> Dict:
     """
     Fallback: call Gemini API directly with function calling.
     Uses the google-generativeai REST API.
@@ -779,12 +796,13 @@ async def _call_gemini_direct(messages: List[Dict], platform: str = "messenger")
 
     body: Dict[str, Any] = {
         "contents": contents,
-        "tools": gemini_tools,
         "generationConfig": {
             "temperature": 0.7,
             "maxOutputTokens": 1024,
         },
     }
+    if use_tools:
+        body["tools"] = gemini_tools
     if system_instruction:
         body["systemInstruction"] = system_instruction
 
@@ -918,7 +936,12 @@ async def _prepare_openai_messages(messages: List[Dict], platform: str = "messen
     return formatted
 
 
-async def _call_openai_direct(messages: List[Dict], platform: str = "messenger", user_id: str = "") -> Dict:
+async def _call_openai_direct(
+    messages: List[Dict],
+    platform: str = "messenger",
+    user_id: str = "",
+    use_tools: bool = True,
+) -> Dict:
     """Call OpenAI API directly with vision support."""
     return await _call_openai_compatible_direct(
         messages=messages,
@@ -926,10 +949,16 @@ async def _call_openai_direct(messages: List[Dict], platform: str = "messenger",
         base_url="https://api.openai.com/v1",
         model="gpt-4o-mini",
         platform=platform,
+        use_tools=use_tools,
     )
 
 
-async def _call_groq_direct(messages: List[Dict], platform: str = "messenger", user_id: str = "") -> Dict:
+async def _call_groq_direct(
+    messages: List[Dict],
+    platform: str = "messenger",
+    user_id: str = "",
+    use_tools: bool = True,
+) -> Dict:
     """Call Groq API directly (text only — Groq doesn't support vision)."""
     # Strip image blocks for Groq since it doesn't support vision
     text_only_messages = []
@@ -948,23 +977,30 @@ async def _call_groq_direct(messages: List[Dict], platform: str = "messenger", u
         base_url="https://api.groq.com/openai/v1",
         model="llama-3.3-70b-versatile",
         platform=platform,
+        use_tools=use_tools,
     )
 
 
 async def _call_openai_compatible_direct(
-    messages: List[Dict], api_key: str, base_url: str, model: str, platform: str = "messenger"
+    messages: List[Dict],
+    api_key: str,
+    base_url: str,
+    model: str,
+    platform: str = "messenger",
+    use_tools: bool = True,
 ) -> Dict:
     """Call an OpenAI-compatible API with function calling and vision support."""
     formatted_messages = await _prepare_openai_messages(messages, platform=platform)
 
-    payload = {
+    payload: Dict[str, Any] = {
         "model": model,
         "messages": formatted_messages,
-        "tools": TOOLS,
-        "tool_choice": "auto",
         "temperature": 0.7,
         "max_tokens": 1024,
     }
+    if use_tools:
+        payload["tools"] = TOOLS
+        payload["tool_choice"] = "auto"
 
     headers = {
         "Authorization": f"Bearer {api_key}",

@@ -9,8 +9,6 @@ POST /webhook/whatsapp — Incoming messages, status updates
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
 import logging
 from typing import Any, Dict, Optional
@@ -21,6 +19,7 @@ from config import settings
 from agent.salesman import get_ai_response
 from conversation.manager import conversation_manager
 from messaging import whatsapp_api
+from webhooks.signature import verify_meta_signature
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +42,7 @@ async def verify_whatsapp(
         logger.info("✅ WhatsApp webhook verified successfully")
         return int(hub_challenge)
 
-    logger.warning(
-        f"❌ WhatsApp webhook verification failed: mode={hub_mode}, token={hub_verify_token}"
-    )
+    logger.warning("WhatsApp webhook verification failed (mode=%s)", hub_mode)
     raise HTTPException(status_code=403, detail="Verification failed")
 
 
@@ -62,9 +59,22 @@ async def handle_whatsapp(request: Request):
     # Verify signature
     if settings.META_APP_SECRET:
         signature = request.headers.get("X-Hub-Signature-256", "")
-        if not _verify_signature(body, signature):
+        if not verify_meta_signature(body, signature):
             logger.warning("❌ Invalid WhatsApp webhook signature")
             raise HTTPException(status_code=403, detail="Invalid signature")
+
+    if not settings.whatsapp_enabled:
+        logger.info("WhatsApp webhook received but ENABLE_WHATSAPP is false")
+        return {"status": "disabled", "channel": "whatsapp"}
+
+    if not settings.whatsapp_configured:
+        missing = []
+        if not settings.META_WHATSAPP_TOKEN:
+            missing.append("META_WHATSAPP_TOKEN")
+        if not settings.META_WHATSAPP_PHONE_ID:
+            missing.append("META_WHATSAPP_PHONE_ID")
+        logger.error("WhatsApp enabled but not configured: %s", ", ".join(missing))
+        return {"status": "not_configured", "channel": "whatsapp", "missing": missing}
 
     data = json.loads(body)
 
@@ -293,6 +303,18 @@ async def _respond_to_user(
         return
 
 
+    if not settings.ai_reply_ready:
+        logger.warning(
+            "WhatsApp message from %s not answered: no AI key. "
+            "META_WHATSAPP_TOKEN is a separate setting.",
+            phone,
+        )
+        await whatsapp_api.send_text(
+            phone,
+            f"Our shopping assistant isn't available right now. Please visit {settings.STORE_URL}",
+        )
+        return
+
     try:
         # Get AI response with tools
         response_text, _ = await get_ai_response(
@@ -372,22 +394,3 @@ def _find_contact(contacts: list, phone: str) -> Optional[Dict]:
     return None
 
 
-def _verify_signature(payload: bytes, signature_header: str) -> bool:
-    """Verify the webhook payload signature from Meta."""
-    if not signature_header:
-        return False
-
-    try:
-        method, signature = signature_header.split("=", 1)
-        if method != "sha256":
-            return False
-
-        expected = hmac.new(
-            settings.META_APP_SECRET.encode("utf-8"),
-            payload,
-            hashlib.sha256,
-        ).hexdigest()
-
-        return hmac.compare_digest(expected, signature)
-    except (ValueError, AttributeError):
-        return False
