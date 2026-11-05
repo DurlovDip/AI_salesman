@@ -1,8 +1,10 @@
 # 🤖 AI Salesman — Fashion ARC
 
-Facebook Messenger & WhatsApp AI Sales Assistant for **Fashion ARC** (fa.bingo).
+Facebook Page bot for **Fashion ARC** (fa.bingo) on the Fabingo Page (`970073619531937`).
 
-An intelligent chatbot that helps customers browse products, track orders, and get answers — all through Messenger and WhatsApp.
+Messenger DMs are the live path. WhatsApp, Instagram Messaging, public comment replies, and comment likes are in the same service, each behind its own env flag. Setup, webhook URLs, and the Development-vs-Live notes are in [docs/setup-fabingo.md](docs/setup-fabingo.md).
+
+Deploy on Render (`render.yaml`). The old `ai-salesman-rho.vercel.app` host is not used. Do not commit Page tokens. `facebook_pages.json` is gitignored; use `facebook_pages.example.json` and `META_PAGE_ACCESS_TOKEN`.
 
 ## Features
 
@@ -115,8 +117,12 @@ Copy the HTTPS URL (e.g., `https://abc123.ngrok.io`).
 | `GET` | `/webhook/messenger` | Messenger verification |
 | `POST` | `/webhook/messenger` | Receive Messenger messages |
 | `GET` | `/webhook/whatsapp` | WhatsApp verification |
-| `POST` | `/webhook/whatsapp` | Receive WhatsApp messages |
-| `POST` | `/test/message` | Test AI (debug mode only) |
+| `POST` | `/webhook/whatsapp` | Receive WhatsApp messages (`ENABLE_WHATSAPP`) |
+| `GET` | `/webhook/instagram` | Instagram verification |
+| `POST` | `/webhook/instagram` | Instagram DMs (`ENABLE_INSTAGRAM`) |
+| `GET` | `/webhook/page` | Page feed verification |
+| `POST` | `/webhook/page` | Comments and reactions (`feed`) |
+| `POST` | `/test/message` | Test AI only. 503 when no AI key is set. Does not use Meta tokens |
 | `GET` | `/conversations` | List active sessions (debug) |
 
 ## Environment Variables
@@ -129,6 +135,11 @@ Copy the HTTPS URL (e.g., `https://abc123.ngrok.io`).
 | `META_PAGE_ID` | Messenger | Facebook Page ID |
 | `META_WHATSAPP_TOKEN` | WhatsApp | WhatsApp Business API token |
 | `META_WHATSAPP_PHONE_ID` | WhatsApp | WhatsApp phone number ID |
+| `ENABLE_MESSENGER` | No | Default `true` |
+| `ENABLE_WHATSAPP` | No | Default `false` |
+| `ENABLE_INSTAGRAM` | No | Default `false` |
+| `ENABLE_PAGE_COMMENTS` | No | Default `false`. Public comment replies |
+| `ENABLE_PAGE_REACTIONS` | No | Default `false`. Like a customer comment once |
 | `FASHION_ARC_API_URL` | Yes | Fashion ARC backend URL |
 | `MULTI_AI_API_URL` | No | Multi-AI API URL (fallback: direct Gemini) |
 | `GEMINI_API_KEY` | Fallback | Direct Gemini API key |
@@ -146,11 +157,18 @@ AI_Salesman/
 │
 ├── webhooks/
 │   ├── messenger.py             # Messenger webhook handler
-│   └── whatsapp.py              # WhatsApp webhook handler
+│   ├── whatsapp.py              # WhatsApp webhook handler
+│   ├── instagram.py             # Instagram Messaging webhook
+│   └── page.py                  # Page feed (comments, reactions)
 │
 ├── messaging/
 │   ├── messenger_api.py         # Messenger Send API wrapper
-│   └── whatsapp_api.py          # WhatsApp Cloud API wrapper
+│   ├── whatsapp_api.py          # WhatsApp Cloud API wrapper
+│   ├── instagram_api.py         # Instagram send wrapper
+│   └── page_api.py              # Comment reply and like
+│
+├── engagement/                  # Comment reply / like policy
+├── docs/setup-fabingo.md        # Fabingo Page setup
 │
 ├── agent/
 │   ├── salesman.py              # AI agent (system prompt + tools)

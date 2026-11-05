@@ -58,7 +58,7 @@ async def _poll_facebook_loop() -> None:
     logger.info("🔁 Started Facebook message polling loop (local webhook emulator)")
     while True:
         await asyncio.sleep(5)  # Poll every 5 seconds
-        if not settings.messenger_configured:
+        if not settings.messenger_enabled or not settings.messenger_configured:
             continue
         try:
             page_id = settings.META_PAGE_ID
@@ -218,6 +218,13 @@ async def _poll_facebook_loop() -> None:
                             await messenger_api.mark_seen(p_id)
                             await messenger_api.send_typing_on(p_id)
 
+                            if not settings.ai_reply_ready:
+                                logger.warning(
+                                    "Polling saw a Messenger message but no AI key is configured. "
+                                    "Not calling the model. META_PAGE_ACCESS_TOKEN is separate."
+                                )
+                                continue
+
                             from agent.salesman import get_ai_response
                             response_text, _ = await get_ai_response(
                                 messages=session.get_chat_messages(),
@@ -314,15 +321,43 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 AI Salesman starting up...")
 
     # Log configuration status
-    if settings.messenger_configured:
-        logger.info("✅ Messenger: configured")
+    if settings.messenger_enabled and settings.messenger_configured:
+        logger.info("✅ Messenger: enabled and token configured")
+    elif settings.messenger_enabled:
+        logger.warning("⚠️  Messenger: enabled but META_PAGE_ACCESS_TOKEN is missing")
     else:
-        logger.warning("⚠️  Messenger: NOT configured (set META_PAGE_ACCESS_TOKEN)")
+        logger.info("ℹ️  Messenger: disabled (ENABLE_MESSENGER=false)")
 
-    if settings.whatsapp_configured:
-        logger.info("✅ WhatsApp: configured")
+    if settings.whatsapp_enabled and settings.whatsapp_configured:
+        logger.info("✅ WhatsApp: enabled and token configured")
+    elif settings.whatsapp_enabled:
+        logger.warning("⚠️  WhatsApp: enabled but META_WHATSAPP_TOKEN or META_WHATSAPP_PHONE_ID is missing")
     else:
-        logger.warning("⚠️  WhatsApp: NOT configured (set META_WHATSAPP_TOKEN + META_WHATSAPP_PHONE_ID)")
+        logger.info("ℹ️  WhatsApp: disabled (ENABLE_WHATSAPP=false)")
+
+    if settings.instagram_enabled and settings.instagram_configured:
+        logger.info("✅ Instagram: enabled and Page token configured")
+    elif settings.instagram_enabled:
+        logger.warning("⚠️  Instagram: enabled but META_PAGE_ACCESS_TOKEN is missing")
+    else:
+        logger.info("ℹ️  Instagram: disabled (ENABLE_INSTAGRAM=false)")
+
+    if settings.page_comments_enabled or settings.page_reactions_enabled:
+        logger.info(
+            "ℹ️  Page engagement: comments=%s reactions=%s",
+            settings.page_comments_enabled,
+            settings.page_reactions_enabled,
+        )
+    else:
+        logger.info("ℹ️  Page comments and reactions: disabled")
+
+    if settings.ai_reply_ready:
+        logger.info("✅ AI replies: at least one provider key is configured")
+    else:
+        logger.warning(
+            "⚠️  AI replies: NOT configured. Set GEMINI_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY. "
+            "A Meta Page token does not generate replies."
+        )
 
     logger.info(f"🏪 Store: {settings.STORE_NAME} ({settings.STORE_URL})")
     logger.info(f"🤖 AI API: {settings.MULTI_AI_API_URL}")
@@ -333,10 +368,11 @@ async def lifespan(app: FastAPI):
     # Start polling task (acts as local webhook fallback)
     # Disable polling loop in production (when DEBUG is False) to rely entirely on webhooks
     polling_task = None
-    if settings.DEBUG:
+    if settings.messenger_polling_enabled and settings.messenger_enabled:
         polling_task = asyncio.create_task(_poll_facebook_loop())
+        logger.info("ℹ️ Messenger polling is ON (ENABLE_MESSENGER_POLLING). Prefer webhooks.")
     else:
-        logger.info("ℹ️ Running in Production mode: disabling Facebook polling loop to rely entirely on webhooks")
+        logger.info("ℹ️ Messenger polling is off. Page, Messenger, Instagram, and WhatsApp use webhooks.")
     # Start local data migration task
     await sync_local_data_to_supabase()
 
@@ -377,9 +413,13 @@ app.add_middleware(
 
 from webhooks.messenger import router as messenger_router
 from webhooks.whatsapp import router as whatsapp_router
+from webhooks.instagram import router as instagram_router
+from webhooks.page import router as page_router
 
 app.include_router(messenger_router)
 app.include_router(whatsapp_router)
+app.include_router(instagram_router)
+app.include_router(page_router)
 
 
 # ── Health & Status Endpoints ────────────────────────────────────────────
@@ -398,26 +438,10 @@ async def root():
 
 @app.get("/health", tags=["Health"])
 async def health():
-    """Detailed health check."""
-    is_debug = settings.DEBUG
+    """Detailed health check. AI keys and Meta tokens are reported separately."""
+    from status import health_snapshot
 
-    return {
-        "status": "ok",
-        "environment": "local" if is_debug else "production",
-        "polling_loop_enabled": is_debug,
-        "webhook_endpoint": "/webhook/messenger",
-        "messenger": settings.messenger_configured,
-        "whatsapp": settings.whatsapp_configured,
-        "store": settings.STORE_NAME,
-        "backend_url": settings.FASHION_ARC_API_URL,
-        "ai_providers": {
-            "openai": bool(settings.OPENAI_API_KEY),
-            "gemini": bool(settings.GEMINI_API_KEY),
-            "groq": bool(settings.GROQ_API_KEY),
-        },
-        "supabase": settings.supabase_configured,
-        "active_conversations": conversation_manager.active_count,
-    }
+    return health_snapshot(active_conversations=conversation_manager.active_count)
 
 
 @app.get("/test-webhook", tags=["Health"])
@@ -427,30 +451,36 @@ async def test_webhook_config(request: Request):
     Visit this after deployment to get webhook setup instructions.
     """
     base_url = str(request.base_url).rstrip("/")
-    is_debug = settings.DEBUG
 
     return {
         "status": "webhook_test_endpoint_ready",
-        "your_webhook_url": f"{base_url}/webhook/messenger",
-        "verify_token": settings.META_VERIFY_TOKEN,
-        "environment": "local" if is_debug else "production",
-        "messenger_configured": settings.messenger_configured,
-        "page_id": settings.META_PAGE_ID if settings.messenger_configured else "NOT_CONFIGURED",
-        "setup_steps": [
-            "1. Go to Meta Developer Console → Your App → Messenger → Settings",
-            f"2. Edit Callback URL and set to: {base_url}/webhook/messenger",
-            f"3. Set Verify Token to: {settings.META_VERIFY_TOKEN}",
-            "4. Click 'Verify and Save' — should see success checkmark",
-            "5. Subscribe to these webhook fields: messages, messaging_postbacks, message_deliveries, message_reads",
-            "6. Under 'Webhooks' section, click 'Add or Remove Pages' and subscribe your Fabingo page",
-            "7. Send a test message to your Facebook Page to trigger the webhook",
-            "8. Check console or server logs to see if webhook is receiving messages"
-        ],
+        "page_id": settings.META_PAGE_ID,
+        "verify_token_configured": bool(settings.META_VERIFY_TOKEN),
+        "verify_token_hint": "Use the META_VERIFY_TOKEN env value. It is not echoed here.",
+        "webhooks": {
+            "messenger": f"{base_url}/webhook/messenger",
+            "whatsapp": f"{base_url}/webhook/whatsapp",
+            "instagram": f"{base_url}/webhook/instagram",
+            "page_feed": f"{base_url}/webhook/page",
+        },
+        "subscribe": {
+            "messenger": ["messages", "messaging_postbacks", "message_deliveries", "message_reads"],
+            "whatsapp": ["messages"],
+            "instagram": ["messages", "messaging_postbacks", "messaging_seen"],
+            "page_feed": ["feed"],
+        },
+        "flags": {
+            "ENABLE_MESSENGER": settings.messenger_enabled,
+            "ENABLE_WHATSAPP": settings.whatsapp_enabled,
+            "ENABLE_INSTAGRAM": settings.instagram_enabled,
+            "ENABLE_PAGE_COMMENTS": settings.page_comments_enabled,
+            "ENABLE_PAGE_REACTIONS": settings.page_reactions_enabled,
+        },
         "troubleshooting": {
-            "if_webhook_verification_fails": "Check that server environment has META_VERIFY_TOKEN environment variable set correctly",
-            "if_messages_not_arriving": "Verify Page is subscribed to webhook in Meta Developer Console",
-            "if_ai_not_responding": "Check /health endpoint to verify AI providers are configured (openai, gemini, or groq keys)",
-        }
+            "if_webhook_verification_fails": "META_VERIFY_TOKEN on the server must match the token typed in the Meta console.",
+            "if_messages_not_arriving": "Subscribe the Fabingo Page to the product webhook, and check the channel flag.",
+            "if_ai_not_responding": "Open /health. ai.can_generate_replies is about AI keys. meta.page_access_token_set is about the Page token. They fail independently.",
+        },
     }
 
 
@@ -762,6 +792,25 @@ async def test_message(body: dict):
     if not text:
         return JSONResponse(status_code=400, content={"detail": "text is required"})
 
+    if not settings.ai_reply_ready:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "detail": "No AI provider is configured, so this endpoint will not invent a reply.",
+                "missing_ai_keys": settings.missing_ai_keys,
+                "multi_ai_configured": settings.multi_ai_configured,
+                "meta_tokens": {
+                    "required": False,
+                    "used": False,
+                    "page_access_token_set": bool(settings.META_PAGE_ACCESS_TOKEN),
+                    "note": (
+                        "META_PAGE_ACCESS_TOKEN, WhatsApp tokens, and other Meta secrets "
+                        "are not read by /test/message. A missing Meta token is not this error."
+                    ),
+                },
+            },
+        )
+
     # Get or create session
     session = await conversation_manager.get_or_create(platform, user_id)
     await session.add_message("user", text)
@@ -780,6 +829,10 @@ async def test_message(body: dict):
         "platform": platform,
         "user_id": user_id,
         "message_count": len(session.messages),
+        "meta_tokens": {
+            "required": False,
+            "used": False,
+        },
     }
 
 

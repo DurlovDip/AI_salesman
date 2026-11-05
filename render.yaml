@@ -14,7 +14,25 @@ services:
       - key: META_PAGE_ACCESS_TOKEN
         sync: false
       - key: META_PAGE_ID
+        value: "970073619531937"
+      - key: META_IG_ID
         sync: false
+      - key: META_WHATSAPP_TOKEN
+        sync: false
+      - key: META_WHATSAPP_PHONE_ID
+        sync: false
+      - key: ENABLE_MESSENGER
+        value: "true"
+      - key: ENABLE_WHATSAPP
+        value: "false"
+      - key: ENABLE_INSTAGRAM
+        value: "false"
+      - key: ENABLE_PAGE_COMMENTS
+        value: "false"
+      - key: ENABLE_PAGE_REACTIONS
+        value: "false"
+      - key: ENABLE_MESSENGER_POLLING
+        value: "false"
       - key: FASHION_ARC_API_URL
         sync: false
       - key: OPENAI_API_KEY

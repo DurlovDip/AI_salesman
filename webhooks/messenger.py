@@ -9,8 +9,6 @@ POST /webhook/messenger — Incoming messages, postbacks, deliveries
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
 import logging
 from typing import Any, Dict
@@ -20,12 +18,9 @@ from fastapi import APIRouter, HTTPException, Query, Request, Response
 from config import settings
 from agent.salesman import get_ai_response
 from conversation.manager import conversation_manager
-from conversation.formatter import (
-    format_products_messenger,
-    format_product_details,
-    format_order_status,
-)
+from engagement.comments import handle_feed_value
 from messaging import messenger_api
+from webhooks.signature import verify_meta_signature
 
 logger = logging.getLogger(__name__)
 
@@ -49,9 +44,7 @@ async def verify_messenger(
         logger.info("✅ Messenger webhook verified successfully")
         return Response(content=hub_challenge, media_type="text/plain")
 
-    logger.warning(
-        f"❌ Messenger webhook verification failed: mode={hub_mode}, token={hub_verify_token}"
-    )
+    logger.warning("Messenger webhook verification failed (mode=%s)", hub_mode)
     raise HTTPException(status_code=403, detail="Verification failed")
 
 
@@ -69,23 +62,38 @@ async def handle_messenger(request: Request):
     # Verify signature (security)
     if settings.META_APP_SECRET:
         signature = request.headers.get("X-Hub-Signature-256", "")
-        if not _verify_signature(body, signature):
+        if not verify_meta_signature(body, signature):
             logger.warning("❌ Invalid Messenger webhook signature")
             raise HTTPException(status_code=403, detail="Invalid signature")
 
     data = json.loads(body)
 
-    # Meta always sends object: "page"
+    # Meta always sends object: "page" for Messenger and for Page feed.
     if data.get("object") != "page":
         return {"status": "ignored"}
 
+    saw_messaging = False
+    feed_results = []
     # Process each entry
     for entry in data.get("entry", []):
-        for messaging_event in entry.get("messaging", []):
-            await _process_messenger_event(messaging_event)
+        page_id = str(entry.get("id") or settings.META_PAGE_ID or "")
+        messaging_events = entry.get("messaging", [])
+        if messaging_events:
+            saw_messaging = True
+            if settings.messenger_enabled:
+                for messaging_event in messaging_events:
+                    await _process_messenger_event(messaging_event)
+            else:
+                logger.info("Messenger event ignored because ENABLE_MESSENGER is false")
+        for change in entry.get("changes", []):
+            if change.get("field") == "feed":
+                feed_results.append(await handle_feed_value(change.get("value") or {}, page_id))
+
+    if saw_messaging and not settings.messenger_enabled and not feed_results:
+        return {"status": "disabled", "channel": "messenger"}
 
     # Must return 200 quickly to avoid Meta retries
-    return {"status": "ok"}
+    return {"status": "ok", "feed_handled": len(feed_results)}
 
 
 # ── Event Processing ─────────────────────────────────────────────────────
@@ -316,6 +324,20 @@ async def _respond_to_user(
         await messenger_api.send_typing_off(sender_id)
         return
 
+    if not settings.ai_reply_ready:
+        logger.warning(
+            "Messenger message from %s not answered: no AI key "
+            "(GEMINI_API_KEY, OPENAI_API_KEY, or GROQ_API_KEY). "
+            "This is not a missing META_PAGE_ACCESS_TOKEN.",
+            sender_id,
+        )
+        await messenger_api.send_typing_off(sender_id)
+        await messenger_api.send_text(
+            sender_id,
+            f"Our shopping assistant isn't available right now. Please visit {settings.STORE_URL}",
+        )
+        return
+
     try:
         # Get AI response with tools
         response_text, _ = await get_ai_response(
@@ -383,26 +405,3 @@ async def _respond_to_user(
         )
 
 
-# ── Signature Verification ──────────────────────────────────────────────
-
-
-def _verify_signature(payload: bytes, signature_header: str) -> bool:
-    """Verify the webhook payload signature from Meta."""
-    if not signature_header:
-        return False
-
-    try:
-        # Format: "sha256=<hash>"
-        method, signature = signature_header.split("=", 1)
-        if method != "sha256":
-            return False
-
-        expected = hmac.new(
-            settings.META_APP_SECRET.encode("utf-8"),
-            payload,
-            hashlib.sha256,
-        ).hexdigest()
-
-        return hmac.compare_digest(expected, signature)
-    except (ValueError, AttributeError):
-        return False

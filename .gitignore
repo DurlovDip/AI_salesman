@@ -1,6 +1,13 @@
-# Environment
+# Environment and secrets
 .env
 .env.local
+.env.*
+!.env.example
+
+# Real Meta page token dumps. Commit facebook_pages.example.json only.
+facebook_pages.json
+**/*pages.json
+!**/*.example.json
 
 # Python
 __pycache__/

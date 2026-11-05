@@ -1,0 +1,11 @@
+{
+  "data": [
+    {
+      "access_token": "PAGE_ACCESS_TOKEN_PLACEHOLDER",
+      "name": "Fabingo",
+      "id": "970073619531937",
+      "tasks": ["MODERATE", "MESSAGING", "ANALYZE", "ADVERTISE", "CREATE_CONTENT", "MANAGE"]
+    }
+  ],
+  "_comment": "Do not put a real token in this file. Set META_PAGE_ACCESS_TOKEN in the environment. facebook_pages.json is gitignored."
+}
